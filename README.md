@@ -1,0 +1,216 @@
+# enhale
+
+Log what you eat **by voice (or text)**, parse it into structured nutrition data
+with an LLM, and (later) correlate it with Apple Health data and blood work to
+recommend lifestyle changes.
+
+Built for **multi-platform reuse**: the valuable logic lives in a standalone
+backend service that iOS, a future web app, and a future Android app all call
+over one HTTP API. Clients share the *API contract*, not source code.
+
+## Architecture
+
+```
+        ┌───────────────────────────────────────────────┐
+        │  backend/  — FastAPI service (the reusable part)│
+        │  • meal parsing (transcript → structured JSON) │
+        │  • LLM integration + prompts (Anthropic)       │
+        │  • accounts + persistence (auth, per-user meals)│
+        │  • holds the API key (never shipped to clients) │
+        └───────────────────────────────────────────────┘
+                 ▲ HTTP — one OpenAPI contract ▲
+      ┌──────────┘            │               └──────────┐
+   iOS (Swift, this repo)  Web (future)         Android (future)
+   voice/text capture      Web Speech API       SpeechRecognizer
+   HealthKit               —                     Health Connect
+   UI                      UI                    UI
+```
+
+| Part | Language | Reusable? | Build / test |
+|---|---|---|---|
+| `backend/` | Python / FastAPI | ✅ shared by all clients | `pytest` — **runs today** |
+| `Core/` | Swift package | iOS only (models + API client) | `swift test` — needs Xcode |
+| `App/` | SwiftUI | iOS only | Xcode |
+
+---
+
+## Running & testing
+
+There are two pieces: the **backend** (runs and tests on any machine with
+Python) and the **iOS app** (needs Xcode). Start with the backend — the app is
+just a client of it.
+
+### 1. Backend — run & test
+
+**Requires:** Python 3.9+.
+
+```sh
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+**Run the test suite** (19 tests — no network, no API key, no database setup;
+uses a stubbed LLM and a throwaway SQLite file):
+
+```sh
+pytest                 # from backend/, with the venv active
+pytest -v              # verbose, lists each test
+```
+
+**Start the server:**
+
+```sh
+# ANTHROPIC_API_KEY is only needed to serve real /meals/parse requests.
+export ANTHROPIC_API_KEY=sk-ant-...
+# JWT_SECRET has an insecure dev default; set a real one for anything shared:
+export JWT_SECRET=$(openssl rand -hex 32)
+
+uvicorn enhale_backend.api.main:app --reload    # http://localhost:8000
+```
+
+- Interactive API docs (try endpoints in the browser): http://localhost:8000/docs
+- A `enhale.db` SQLite file is created automatically on first run.
+- Cheaper model option: `export ANTHROPIC_MODEL=claude-haiku-4-5`.
+
+**End-to-end smoke test** (with the server running, in another terminal —
+needs `jq` for pretty output):
+
+```sh
+# 1. Health check — no auth
+curl -s localhost:8000/health
+
+# 2. Register an account → returns a JWT
+TOKEN=$(curl -s -X POST localhost:8000/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"hunter2!"}' | jq -r .access_token)
+
+# 3. Parse + store a meal (requires ANTHROPIC_API_KEY set on the server)
+curl -s -X POST localhost:8000/meals/parse \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"transcript":"two scrambled eggs and a black coffee this morning","timezone":"America/New_York"}' | jq
+
+# 4. List your meals back
+curl -s localhost:8000/meals -H "authorization: Bearer $TOKEN" | jq
+```
+
+If `ANTHROPIC_API_KEY` isn't set, steps 1–2 still work; step 3 returns
+`500 ANTHROPIC_API_KEY is not set` (auth and persistence are exercised, just not
+real parsing).
+
+### 2. iOS app — build & run
+
+> ⚠️ **This machine's Swift toolchain is currently broken** (compiler/SDK
+> mismatch + a duplicate `SwiftBridging` module map) — no Swift builds until
+> **Xcode** is installed from the Mac App Store, which replaces the toolchain.
+> The Python backend is unaffected. The steps below assume a working Xcode.
+
+**Requires:** Xcode 16+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(`brew install xcodegen`).
+
+```sh
+# a. Test the shared client logic (models + API contract)
+cd Core && swift test
+
+# b. Generate and open the iOS project
+cd ..                    # repo root
+xcodegen generate        # creates Enhale.xcodeproj from project.yml
+open Enhale.xcodeproj
+```
+
+Then in Xcode: pick an iOS Simulator (or your device) and press **Run** (⌘R).
+
+**First-run setup in the app:**
+
+1. Make sure the backend is running (step 1 above).
+2. On first launch you'll see the sign-in screen — **create an account**.
+3. Open the **Settings** tab and set the **Backend URL**:
+   - **Simulator:** `http://localhost:8000` works as-is.
+   - **Physical device:** use your Mac's LAN address (e.g. `http://192.168.1.x:8000`)
+     and add an **App Transport Security** exception for plain HTTP during dev
+     (Info.plist `NSAppTransportSecurity` → `NSAllowsLocalNetworking`), or run the
+     backend behind HTTPS.
+4. Go to the **Log** tab. **Speak or type** what you ate, then tap **Log meal**.
+   (Typing is always available as a fallback if dictation fails or permission is
+   denied.)
+
+---
+
+## backend/ — the reusable service
+
+```
+backend/enhale_backend/
+  models.py                 # Pydantic domain models = source of truth for the API contract
+  config.py                 # env-driven settings (DB URL, JWT, Anthropic key/model)
+  db.py                     # async SQLAlchemy engine + session dependency
+  db_models.py              # ORM tables: User, Meal (meal stored as JSON + indexed columns)
+  llm/client.py             # LLMClient protocol (provider-agnostic)
+  llm/anthropic_client.py   # Claude via official `anthropic` SDK
+  parsing/meal_parser.py    # transcript → ParsedMeal (deterministic around the LLM)
+  parsing/prompts.py        # prompt text (tunable in isolation)
+  auth/security.py          # argon2 password hashing + JWT
+  auth/router.py            # POST /auth/register, /auth/login, GET /auth/me
+  meals/router.py           # POST /meals/parse, GET /meals, DELETE /meals/{id} (all per-user)
+  api/main.py               # FastAPI app wiring routers + startup DB init
+```
+
+**Endpoints:**
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/health` | — | liveness check |
+| POST | `/auth/register` | — | create account → JWT |
+| POST | `/auth/login` | — | sign in → JWT |
+| GET | `/auth/me` | ✅ | current user |
+| POST | `/meals/parse` | ✅ | parse transcript + store meal |
+| GET | `/meals[?on=YYYY-MM-DD]` | ✅ | list your meals |
+| DELETE | `/meals/{id}` | ✅ | delete your meal |
+
+**Persistence:** SQLAlchemy 2.0 async. Defaults to **SQLite** for zero-setup
+local dev; set `DATABASE_URL=postgresql+asyncpg://…` (and `pip install asyncpg`)
+for **Postgres** in prod — no code changes. Redis is intentionally *not* the
+primary store; it's a good fit later for caching / rate-limiting / job queues.
+
+**Auth:** email + password (argon2-hashed) → JWT bearer token. Every `/meals`
+route is scoped to the authenticated user (health-data isolation).
+
+**Why this is the reusable layer:** the web and Android apps will each write a
+thin client (their own `EnhaleAPIClient` equivalent) against this same set of
+endpoints. No parsing logic, prompts, auth, or API keys are duplicated per
+platform.
+
+## iOS app (Core/ + App/)
+
+- `Core/` — Codable models matching the contract + `EnhaleAPIClient`
+  (register / login / parse / list). Contract test in `Core/Tests` pins the JSON
+  mapping to the backend.
+- `App/` — `SessionManager` + `AuthView` (JWT auth, token in Keychain),
+  `SpeechRecognizer` (mic → transcript), `VoiceLogView` (speak **or type** →
+  parse → save), `TodayView`, `SettingsView` (backend URL + sign out),
+  `MealStore` (local cache).
+
+## Configuration reference
+
+| Env var | Where | Default | Notes |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | backend | — | required to serve real `/meals/parse` |
+| `ANTHROPIC_MODEL` | backend | `claude-opus-4-8` | `claude-haiku-4-5` is cheaper |
+| `DATABASE_URL` | backend | SQLite file | `postgresql+asyncpg://…` for prod |
+| `JWT_SECRET` | backend | insecure dev default | **set a real one** in any deployment |
+| `JWT_EXPIRE_MINUTES` | backend | 1 week | token lifetime |
+| Backend URL | iOS app | `http://localhost:8000` | set in the app's Settings tab |
+
+## Roadmap
+
+- [x] Backend service: voice-transcript → LLM parsing
+- [x] iOS client: voice/text capture → backend → local history
+- [x] Backend persistence + user accounts (SQLAlchemy + JWT auth, per-user meals)
+- [ ] iOS: fetch history from backend (currently a local cache) — server-side sync
+- [ ] Alembic migrations (replace create-all before prod schema changes)
+- [ ] Web app (TypeScript/React) against the same API
+- [ ] Android app (Kotlin) against the same API
+- [ ] HealthKit (iOS) / Health Connect (Android) sync → send to backend
+- [ ] Blood-work ingestion (lab PDF parsing — sensitive data, handle carefully)
+- [ ] Habit analysis + recommendations (backend, over all sources)
+```

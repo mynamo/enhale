@@ -1,0 +1,29 @@
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Python (backend)
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local dev database (SQLite)
+*.db
+
+# macOS
+.DS_Store
+
+# Secrets — never commit API keys
+*.env
+Secrets.plist
