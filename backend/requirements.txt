@@ -1,0 +1,15 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+anthropic>=0.40
+pydantic[email]>=2.6
+
+# Persistence
+sqlalchemy[asyncio]>=2.0
+aiosqlite>=0.19        # dev/default driver
+alembic>=1.13          # migrations (before prod schema changes)
+# For Postgres in production, also install: asyncpg>=0.29
+#   and set DATABASE_URL=postgresql+asyncpg://user:pass@host/dbname
+
+# Auth
+argon2-cffi>=23.1      # password hashing
+pyjwt>=2.8             # JWT access tokens

@@ -1,0 +1,35 @@
+"""FastAPI application: the HTTP seam every client (iOS, web, Android) talks to.
+
+The OpenAPI schema generated from these routers + the Pydantic models is the
+shared contract — clients share this API, not Python source.
+"""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from ..auth.router import router as auth_router
+from ..db import init_db
+from ..meals.router import router as meals_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Dev/MVP: create tables on startup. Switch to Alembic migrations before
+    # making schema changes in production.
+    await init_db()
+    yield
+
+
+app = FastAPI(title="enhale backend", version="0.2.0", lifespan=lifespan)
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "ok"}
+
+
+app.include_router(auth_router)
+app.include_router(meals_router)
