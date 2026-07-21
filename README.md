@@ -72,6 +72,9 @@ uvicorn enhale_backend.api.main:app --reload    # http://localhost:8000
 - Interactive API docs (try endpoints in the browser): http://localhost:8000/docs
 - A `enhale.db` SQLite file is created automatically on first run.
 - Cheaper model option: `export ANTHROPIC_MODEL=claude-haiku-4-5`.
+- **Port already in use?** If something else is on `:8000`
+  (`error while attempting to bind ... address already in use`), add
+  `--port 8001` and use that port below and in the app's Settings.
 
 **End-to-end smoke test** (with the server running, in another terminal —
 needs `jq` for pretty output):
