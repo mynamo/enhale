@@ -22,12 +22,26 @@ public struct EnhaleAPIClient: Sendable {
         self.session = session
     }
 
-    public enum APIError: Error {
+    public enum APIError: Error, LocalizedError {
         case http(status: Int, body: String)
         case unauthorized
         case emailTaken
         case noFoodFound
         case badResponse
+
+        public var errorDescription: String? {
+            switch self {
+            case .http(let status, _):
+                if (500...599).contains(status) {
+                    return "The server hit a snag (HTTP \(status)) — it may just be waking up. Please try again in a few seconds."
+                }
+                return "The server returned an error (HTTP \(status))."
+            case .unauthorized: return "Your session has expired. Please sign in again."
+            case .emailTaken: return "That email is already registered."
+            case .noFoodFound: return "No food was recognized in that entry."
+            case .badResponse: return "Unexpected response from the server."
+            }
+        }
     }
 
     // MARK: - Auth
