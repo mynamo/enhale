@@ -79,6 +79,24 @@ public struct EnhaleAPIClient: Sendable {
         return try Self.decoder.decode([ParsedMeal].self, from: data)
     }
 
+    // MARK: - Health
+
+    /// Push HealthKit-derived data to the backend (idempotent upsert).
+    @discardableResult
+    public func syncHealth(_ request: HealthSyncRequest) async throws -> HealthSyncResult {
+        let data = try await send(path: "health/sync", method: "POST", body: request, authorized: true)
+        return try Self.decoder.decode(HealthSyncResult.self, from: data)
+    }
+
+    /// Read back a recent health summary for the signed-in user.
+    public func healthSummary(days: Int = 14) async throws -> HealthSummary {
+        let data = try await send(
+            path: "health/summary?days=\(days)", method: "GET",
+            body: Optional<Empty>.none, authorized: true
+        )
+        return try Self.decoder.decode(HealthSummary.self, from: data)
+    }
+
     // MARK: - Request plumbing
 
     private func send<Body: Encodable>(
@@ -153,6 +171,13 @@ public struct EnhaleAPIClient: Sendable {
             let plain = ISO8601DateFormatter()
             plain.formatOptions = [.withInternetDateTime]
             if let date = plain.date(from: string) { return date }
+            // Safety net: a datetime with no timezone (e.g. SQLite round-trips) —
+            // interpret it as UTC.
+            let naive = DateFormatter()
+            naive.calendar = Calendar(identifier: .gregorian)
+            naive.timeZone = TimeZone(identifier: "UTC")
+            naive.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            if let date = naive.date(from: string) { return date }
             throw DecodingError.dataCorrupted(
                 .init(codingPath: decoder.codingPath,
                       debugDescription: "Unrecognized date: \(string)")

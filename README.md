@@ -222,6 +222,8 @@ backend/enhale_backend/
 | POST | `/meals/parse` | ✅ | parse transcript + store meal |
 | GET | `/meals[?on=YYYY-MM-DD]` | ✅ | list your meals |
 | DELETE | `/meals/{id}` | ✅ | delete your meal |
+| POST | `/health/sync` | ✅ | upsert workouts / sleep / daily metrics from HealthKit |
+| GET | `/health/summary[?days=N]` | ✅ | recent workouts, sleep, and activity |
 
 **Persistence:** SQLAlchemy 2.0 async. Defaults to **SQLite** for zero-setup
 local dev; set `DATABASE_URL=postgresql+asyncpg://…` (and `pip install asyncpg`)
@@ -262,11 +264,11 @@ platform.
 - [x] Backend service: voice-transcript → LLM parsing
 - [x] iOS client: voice/text capture → backend → local history
 - [x] Backend persistence + user accounts (SQLAlchemy + JWT auth, per-user meals)
-- [ ] iOS: fetch history from backend (currently a local cache) — server-side sync
+- [x] HealthKit sync (iOS) — workouts, sleep, daily activity/vitals → backend
+- [ ] iOS: fetch meal history from backend (currently a local cache) — server-side sync
 - [ ] Alembic migrations (replace create-all before prod schema changes)
 - [ ] Web app (TypeScript/React) against the same API
-- [ ] Android app (Kotlin) against the same API
-- [ ] HealthKit (iOS) / Health Connect (Android) sync → send to backend
+- [ ] Android app (Kotlin) against the same API — Health Connect → same `/health/sync`
 - [ ] Blood-work ingestion (lab PDF parsing — sensitive data, handle carefully)
 - [ ] Habit analysis + recommendations (backend, over all sources)
 ```
