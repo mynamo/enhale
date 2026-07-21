@@ -25,7 +25,12 @@ targets:
       properties:
         NSMicrophoneUsageDescription: "enhale uses the microphone so you can speak what you ate instead of typing it."
         NSSpeechRecognitionUsageDescription: "enhale transcribes your spoken meals into text so it can log and analyze them."
+        NSLocalNetworkUsageDescription: "enhale connects to your enhale backend running on your local network."
         UILaunchScreen: {}
+        # DEV ONLY: allow plain HTTP to a backend on your local network (e.g. your
+        # Mac's LAN IP during development). Remove this and use HTTPS in production.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.enhale.app
