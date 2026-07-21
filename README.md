@@ -193,35 +193,42 @@ Notes:
 
 ---
 
-## Deploying (free, on Render)
+## Deploying (free): Neon Postgres + Render
 
-Deploy the backend so the phone can reach it over HTTPS from anywhere — no need to
-keep your Mac running. The repo includes a `render.yaml` blueprint that provisions
-the web service **and** a free Postgres database in one step.
+Deploy the backend so the phone reaches it over HTTPS from anywhere — no need to
+keep your Mac running. **Neon** hosts the database (free, persistent) and
+**Render** hosts the web service (free). Both are free with no credit card.
 
-1. Push this repo to GitHub (already done for the PR branch).
-2. Go to [render.com](https://render.com) → sign up (no credit card for the free
-   tier) → **New → Blueprint** → connect this repository → **Apply**.
-   - It reads `render.yaml`: creates `enhale-backend` (free web service) + a free
-     Postgres, wires `DATABASE_URL`, and auto-generates `JWT_SECRET`.
-3. In the service's **Environment**, set **`ANTHROPIC_API_KEY`** to your key (it's
-   marked `sync: false` so it's never committed). Save → it redeploys.
-4. You'll get an HTTPS URL like `https://enhale-backend.onrender.com`. Open
-   `…/health` in a browser — it should return `{"status":"ok"}`.
-5. In the app's **Backend URL**, use that HTTPS URL. HTTPS means no local-network
-   exception is needed, and it works over cellular too.
+**1. Create the database (Neon)**
+- [neon.tech](https://neon.tech) → sign up → **New Project** (pick a region).
+- Copy the **connection string** — looks like
+  `postgresql://user:pass@ep-xxx.region.aws.neon.tech/neondb?sslmode=require`.
+  (Either the direct or the `-pooler` string works — the app handles both.)
 
-Free-tier caveats (fine for personal use):
-- The web service **sleeps after ~15 min idle**; the next request cold-starts in
-  ~30–60s. Just retry if the first call is slow.
-- Render's **free Postgres expires after ~30 days** — for a longer-lived free DB,
-  create one at [neon.tech](https://neon.tech) (free, no expiry) and paste its URL
-  into `DATABASE_URL` instead (the code normalizes the scheme automatically).
-- `ANTHROPIC_MODEL` defaults to `claude-haiku-4-5` (cheap). Set it to
-  `claude-opus-4-8` for sharper insights/investigations.
+**2. Deploy the web service (Render)**
+- [render.com](https://render.com) → sign up → **New → Blueprint** → connect this
+  repo → select the branch → **Apply**. It reads `render.yaml` and creates the
+  `enhale-backend` free web service (and generates `JWT_SECRET`).
+- Open **enhale-backend → Environment** and set:
+  - **`DATABASE_URL`** = your Neon connection string (paste verbatim).
+  - **`ANTHROPIC_API_KEY`** = your key.
+  - (optional) **`ANTHROPIC_MODEL`** = `claude-opus-4-8` for sharper insights.
+- Save → it builds and deploys (~2–3 min).
 
-Schema is created automatically on first boot (`create_all`). Switch to Alembic
-before you start changing the schema in production.
+**3. Point the app at it**
+- You'll get an HTTPS URL like `https://enhale-backend.onrender.com`. Open
+  `…/health` — it should return `{"status":"ok"}`.
+- In the app's **Backend URL**, use that HTTPS URL. Works over cellular; no
+  local-network exception needed.
+
+Notes (fine for personal use):
+- Render's free web service **sleeps after ~15 min idle**; the next request
+  cold-starts in ~30–60s. Retry once if the first call is slow.
+- Tables are created automatically on first boot (`create_all`); switch to
+  Alembic before changing the schema in production.
+- The app normalizes the Postgres URL (adds the async driver, handles SSL, and
+  disables the prepared-statement cache for pooled endpoints) — so you can paste
+  Neon's string as-is.
 
 ## backend/ — the reusable service
 

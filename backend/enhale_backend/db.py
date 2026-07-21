@@ -48,6 +48,9 @@ def _engine_config(url: str) -> tuple[str, dict]:
     )
     if wants_ssl:
         connect_args["ssl"] = True
+    # Disable asyncpg's prepared-statement cache so a PgBouncer/transaction-pooled
+    # endpoint (e.g. Neon's "-pooler" host) works. Negligible cost for this app.
+    connect_args["statement_cache_size"] = 0
     cleaned = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
     return cleaned, connect_args
 
