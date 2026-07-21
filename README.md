@@ -193,6 +193,36 @@ Notes:
 
 ---
 
+## Deploying (free, on Render)
+
+Deploy the backend so the phone can reach it over HTTPS from anywhere — no need to
+keep your Mac running. The repo includes a `render.yaml` blueprint that provisions
+the web service **and** a free Postgres database in one step.
+
+1. Push this repo to GitHub (already done for the PR branch).
+2. Go to [render.com](https://render.com) → sign up (no credit card for the free
+   tier) → **New → Blueprint** → connect this repository → **Apply**.
+   - It reads `render.yaml`: creates `enhale-backend` (free web service) + a free
+     Postgres, wires `DATABASE_URL`, and auto-generates `JWT_SECRET`.
+3. In the service's **Environment**, set **`ANTHROPIC_API_KEY`** to your key (it's
+   marked `sync: false` so it's never committed). Save → it redeploys.
+4. You'll get an HTTPS URL like `https://enhale-backend.onrender.com`. Open
+   `…/health` in a browser — it should return `{"status":"ok"}`.
+5. In the app's **Backend URL**, use that HTTPS URL. HTTPS means no local-network
+   exception is needed, and it works over cellular too.
+
+Free-tier caveats (fine for personal use):
+- The web service **sleeps after ~15 min idle**; the next request cold-starts in
+  ~30–60s. Just retry if the first call is slow.
+- Render's **free Postgres expires after ~30 days** — for a longer-lived free DB,
+  create one at [neon.tech](https://neon.tech) (free, no expiry) and paste its URL
+  into `DATABASE_URL` instead (the code normalizes the scheme automatically).
+- `ANTHROPIC_MODEL` defaults to `claude-haiku-4-5` (cheap). Set it to
+  `claude-opus-4-8` for sharper insights/investigations.
+
+Schema is created automatically on first boot (`create_all`). Switch to Alembic
+before you start changing the schema in production.
+
 ## backend/ — the reusable service
 
 ```

@@ -1,0 +1,28 @@
+# Render Blueprint — deploys the enhale backend + a free Postgres database.
+# In Render: New → Blueprint → connect this repo → Apply. Then set ANTHROPIC_API_KEY.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: enhale-backend
+    runtime: python
+    rootDir: backend            # the FastAPI app lives in backend/
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn enhale_backend.api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false             # set this yourself in the dashboard (secret)
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-4-5 # cheap; switch to claude-opus-4-8 for sharper insights
+      - key: JWT_SECRET
+        generateValue: true     # Render generates a strong random secret
+      - key: DATABASE_URL
+        fromDatabase:
+          name: enhale-db
+          property: connectionString
+
+databases:
+  - name: enhale-db
+    plan: free

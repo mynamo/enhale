@@ -6,10 +6,9 @@ python-multipart>=0.0.9    # file uploads (blood work reports)
 
 # Persistence
 sqlalchemy[asyncio]>=2.0
-aiosqlite>=0.19        # dev/default driver
+aiosqlite>=0.19        # dev/default driver (SQLite)
+asyncpg>=0.29          # prod driver (Postgres) — used when DATABASE_URL is postgres
 alembic>=1.13          # migrations (before prod schema changes)
-# For Postgres in production, also install: asyncpg>=0.29
-#   and set DATABASE_URL=postgresql+asyncpg://user:pass@host/dbname
 
 # Auth
 argon2-cffi>=23.1      # password hashing
