@@ -15,7 +15,7 @@ final class SessionManager: ObservableObject {
 
     /// The backend base URL, configured in Settings (defaults to localhost).
     private var baseURL: URL? {
-        let raw = UserDefaults.standard.string(forKey: "backendBaseURL") ?? "http://localhost:8000"
+        let raw = UserDefaults.standard.string(forKey: "backendBaseURL") ?? "http://127.0.0.1:8000"
         return URL(string: raw)
     }
 
