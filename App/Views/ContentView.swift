@@ -15,8 +15,8 @@ struct ContentView: View {
                 HealthView()
                     .tabItem { Label("Health", systemImage: "heart.fill") }
 
-                BloodWorkView()
-                    .tabItem { Label("Labs", systemImage: "cross.case.fill") }
+                InsightsView()
+                    .tabItem { Label("Insights", systemImage: "sparkles") }
 
                 SettingsView()
                     .tabItem { Label("Settings", systemImage: "gear") }

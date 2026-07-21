@@ -147,6 +147,21 @@ public struct EnhaleAPIClient: Sendable {
         )
     }
 
+    // MARK: - Insights
+
+    /// Generate a fresh recommendations report from the user's data (LLM call —
+    /// can take some seconds). Also stored server-side.
+    public func generateInsights() async throws -> InsightReport {
+        let data = try await send(path: "insights/generate", method: "POST", body: Optional<Empty>.none, authorized: true)
+        return try Self.decoder.decode(InsightReport.self, from: data)
+    }
+
+    /// List previously generated reports, newest first.
+    public func listInsights() async throws -> [InsightReport] {
+        let data = try await send(path: "insights", method: "GET", body: Optional<Empty>.none, authorized: true)
+        return try Self.decoder.decode([InsightReport].self, from: data)
+    }
+
     // MARK: - Request plumbing
 
     private func send<Body: Encodable>(

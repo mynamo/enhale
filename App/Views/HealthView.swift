@@ -35,6 +35,14 @@ struct HealthView: View {
                     if let errorMessage { Text(errorMessage).font(.footnote).foregroundStyle(.red) }
                 }
 
+                Section {
+                    NavigationLink {
+                        BloodWorkView()
+                    } label: {
+                        Label("Lab reports (blood work)", systemImage: "cross.case.fill")
+                    }
+                }
+
                 if let summary {
                     workoutsSection(summary.workouts)
                     sleepSection(summary.sleep)

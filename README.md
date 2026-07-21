@@ -227,6 +227,8 @@ backend/enhale_backend/
 | POST | `/bloodwork/upload` | ✅ | upload a lab report (PDF/PNG/JPEG) → Claude extracts markers |
 | GET | `/bloodwork` | ✅ | list uploaded blood-work panels |
 | DELETE | `/bloodwork/{id}` | ✅ | delete a panel |
+| POST | `/insights/generate` | ✅ | synthesize recommendations from meals + health + labs |
+| GET | `/insights` | ✅ | list generated reports (newest first) |
 
 **Persistence:** SQLAlchemy 2.0 async. Defaults to **SQLite** for zero-setup
 local dev; set `DATABASE_URL=postgresql+asyncpg://…` (and `pip install asyncpg`)
@@ -270,8 +272,8 @@ platform.
 - [x] HealthKit sync (iOS) — workouts, sleep, daily activity/vitals → backend
 - [x] Meal history — server-backed (iOS History tab reads from the backend)
 - [x] Blood-work ingestion — upload PDF/PNG/JPEG → Claude vision extracts markers
+- [x] Habit analysis + recommendations — Insights tab synthesizes meals + health + labs
 - [ ] Alembic migrations (replace create-all before prod schema changes)
 - [ ] Web app (TypeScript/React) against the same API
 - [ ] Android app (Kotlin) against the same API — Health Connect → same `/health/sync`
-- [ ] Habit analysis + recommendations (backend, over meals + health + labs)
 ```

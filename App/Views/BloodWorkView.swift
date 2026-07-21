@@ -13,8 +13,7 @@ struct BloodWorkView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            Group {
+        Group {
                 if panels.isEmpty && !isUploading {
                     ContentUnavailableView {
                         Label("No lab reports yet", systemImage: "cross.case")
@@ -51,8 +50,7 @@ struct BloodWorkView: View {
                     Text(errorMessage).font(.footnote).foregroundStyle(.red).padding()
                 }
             }
-            .onAppear { Task { await load() } }
-        }
+        .onAppear { Task { await load() } }
     }
 
     private var uploadButton: some View {
