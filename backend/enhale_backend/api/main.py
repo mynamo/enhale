@@ -31,6 +31,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="enhale backend", version="0.2.0", lifespan=lifespan)
 
 
+@app.get("/")
+async def root() -> dict:
+    return {"service": "enhale", "status": "ok", "docs": "/docs", "health": "/health"}
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
