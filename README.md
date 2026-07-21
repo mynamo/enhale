@@ -140,13 +140,56 @@ xcodebuild -project Enhale.xcodeproj -scheme Enhale \
 2. On first launch you'll see the sign-in screen — **create an account**.
 3. Open the **Settings** tab and set the **Backend URL**:
    - **Simulator:** `http://localhost:8000` works as-is.
-   - **Physical device:** use your Mac's LAN address (e.g. `http://192.168.1.x:8000`)
-     and add an **App Transport Security** exception for plain HTTP during dev
-     (Info.plist `NSAppTransportSecurity` → `NSAllowsLocalNetworking`), or run the
-     backend behind HTTPS.
+   - **Physical device:** use your Mac's LAN address — see the next section.
 4. Go to the **Log** tab. **Speak or type** what you ate, then tap **Log meal**.
    (Typing is always available as a fallback if dictation fails or permission is
    denied.)
+
+### 3. Run on a physical iPhone
+
+Uses a **free Apple ID** — no paid Apple Developer account needed. Your phone and
+Mac must be on the **same Wi-Fi network**.
+
+**Sign the app (one-time):**
+
+1. Xcode → **Settings → Accounts → +** → sign in with your Apple ID.
+2. Select the **Enhale** target → **Signing & Capabilities** → check **Automatically
+   manage signing** and pick your personal **Team**. If the bundle ID is rejected as
+   taken, change `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml` to something unique
+   (e.g. `com.yourname.enhale`) and re-run `xcodegen generate`.
+
+> Free-account limits: the app runs ~7 days before you must re-deploy from Xcode.
+
+**Prepare the phone:**
+
+3. Connect via USB, tap **Trust This Computer** on the phone.
+4. On the phone: **Settings → Privacy & Security → Developer Mode → On**, then restart.
+
+**Run:**
+
+5. Pick your iPhone in Xcode's device dropdown, press **Run** (⌘R).
+6. First launch shows "Untrusted Developer" — on the phone go to **Settings → General
+   → VPN & Device Management → [your Apple ID] → Trust**, then reopen the app.
+
+**Point it at the backend (over Wi-Fi, not localhost):**
+
+7. Start the backend bound to all interfaces so the phone can reach it:
+   ```sh
+   uvicorn enhale_backend.api.main:app --host 0.0.0.0 --port 8000
+   ```
+   `--host 0.0.0.0` is essential — the default only accepts localhost.
+8. Find your Mac's Wi-Fi IP: `ipconfig getifaddr en0` (e.g. `192.168.4.31`).
+9. In the app's **Settings**, set **Backend URL** to `http://<mac-ip>:8000`.
+10. On first meal-log, allow the **microphone**, **speech**, and **local network**
+    prompts. Real on-device dictation now works (the simulator used the Mac's mic).
+
+Notes:
+- A **dev-only** App Transport Security exception (`NSAllowsLocalNetworking`) is
+  already set in `project.yml` so plain-HTTP LAN calls aren't blocked. **Remove it /
+  use HTTPS before shipping.**
+- Can't connect? Confirm same Wi-Fi, that uvicorn prints `http://0.0.0.0:8000`, and
+  allow the macOS "accept incoming connections" firewall prompt. The Mac's IP can
+  change between networks — re-check `ipconfig getifaddr en0`.
 
 ---
 
