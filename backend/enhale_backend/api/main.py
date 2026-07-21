@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ..auth.router import router as auth_router
+from ..bloodwork.router import router as bloodwork_router
 from ..db import init_db
 from ..health.router import router as health_router
 from ..meals.router import router as meals_router
@@ -35,3 +36,4 @@ async def health() -> dict:
 app.include_router(auth_router)
 app.include_router(meals_router)
 app.include_router(health_router)
+app.include_router(bloodwork_router)

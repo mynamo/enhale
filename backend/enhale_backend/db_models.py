@@ -114,3 +114,20 @@ class DailyMetric(Base):
     resting_heart_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     hrv_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     body_mass_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+class BloodWorkPanelRow(Base):
+    """An uploaded lab report + its extracted markers (stored as JSON payload)."""
+
+    __tablename__ = "bloodwork_panels"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    collected_on: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True, index=True)
+    source_filename: Mapped[str] = mapped_column(String(255))
+    payload: Mapped[dict] = mapped_column(JSON)  # full BloodWorkPanel incl markers
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )

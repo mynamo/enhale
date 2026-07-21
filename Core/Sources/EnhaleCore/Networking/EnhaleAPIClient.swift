@@ -79,6 +79,14 @@ public struct EnhaleAPIClient: Sendable {
         return try Self.decoder.decode([ParsedMeal].self, from: data)
     }
 
+    /// Delete one of the signed-in user's meals.
+    public func deleteMeal(id: UUID) async throws {
+        _ = try await send(
+            path: "meals/\(id.uuidString.lowercased())", method: "DELETE",
+            body: Optional<Empty>.none, authorized: true
+        )
+    }
+
     // MARK: - Health
 
     /// Push HealthKit-derived data to the backend (idempotent upsert).
@@ -95,6 +103,48 @@ public struct EnhaleAPIClient: Sendable {
             body: Optional<Empty>.none, authorized: true
         )
         return try Self.decoder.decode(HealthSummary.self, from: data)
+    }
+
+    // MARK: - Blood work
+
+    /// Upload a lab report (PDF/PNG/JPEG). The backend extracts markers via
+    /// Claude and returns the structured panel; the file itself isn't stored.
+    public func uploadBloodWork(
+        fileData: Data, filename: String, mimeType: String
+    ) async throws -> BloodWorkPanel {
+        guard let token else { throw APIError.unauthorized }
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = URLRequest(url: baseURL.appendingPathComponent("bloodwork/upload"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        func append(_ s: String) { body.append(s.data(using: .utf8)!) }
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+        append("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(fileData)
+        append("\r\n--\(boundary)--\r\n")
+        request.httpBody = body
+
+        let (data, response) = try await session.data(for: request)
+        let ok = try Self.process(data, response)
+        return try Self.decoder.decode(BloodWorkPanel.self, from: ok)
+    }
+
+    /// List the signed-in user's uploaded blood work panels.
+    public func listBloodWork() async throws -> [BloodWorkPanel] {
+        let data = try await send(path: "bloodwork", method: "GET", body: Optional<Empty>.none, authorized: true)
+        return try Self.decoder.decode([BloodWorkPanel].self, from: data)
+    }
+
+    /// Delete one blood work panel.
+    public func deleteBloodWork(id: UUID) async throws {
+        _ = try await send(
+            path: "bloodwork/\(id.uuidString.lowercased())", method: "DELETE",
+            body: Optional<Empty>.none, authorized: true
+        )
     }
 
     // MARK: - Request plumbing
@@ -117,8 +167,12 @@ public struct EnhaleAPIClient: Sendable {
         }
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.badResponse }
+        return try Self.process(data, response)
+    }
 
+    /// Map an HTTP response to data-or-error. Shared by JSON and multipart calls.
+    private static func process(_ data: Data, _ response: URLResponse) throws -> Data {
+        guard let http = response as? HTTPURLResponse else { throw APIError.badResponse }
         switch http.statusCode {
         case 200..<300:
             return data
