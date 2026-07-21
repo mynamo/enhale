@@ -57,7 +57,12 @@ def _engine_config(url: str) -> tuple[str, dict]:
 
 _settings = get_settings()
 _url, _connect_args = _engine_config(_settings.database_url)
-engine = create_async_engine(_url, future=True, connect_args=_connect_args)
+# pool_pre_ping: verify a pooled connection is still alive before using it and
+# transparently reconnect if not. Important for serverless Postgres (Neon) that
+# closes idle connections when it scales to zero — avoids stale-connection 500s.
+engine = create_async_engine(
+    _url, future=True, connect_args=_connect_args, pool_pre_ping=True
+)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
