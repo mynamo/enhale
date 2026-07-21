@@ -123,8 +123,11 @@ struct VoiceLogView: View {
         } catch EnhaleAPIClient.APIError.unauthorized {
             errorMessage = "Your session expired — please sign in again."
             session.logout()
+        } catch let apiError as EnhaleAPIClient.APIError {
+            // Friendly text (incl. the "server waking up, retry" hint for 5xx).
+            errorMessage = apiError.errorDescription
         } catch {
-            errorMessage = "Couldn't reach the backend: \(error.localizedDescription)"
+            errorMessage = "Couldn't reach the server — check your connection and the Backend URL in Settings."
         }
     }
 }
