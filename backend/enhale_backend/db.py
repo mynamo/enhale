@@ -8,6 +8,7 @@ Postgres (prod) with only an env-var change.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -23,8 +24,37 @@ class Base(DeclarativeBase):
     """Base class for all ORM models."""
 
 
+def _engine_config(url: str) -> tuple[str, dict]:
+    """Make any managed-Postgres URL work with asyncpg.
+
+    Managed providers (Neon, Supabase, Aiven, Render, …) require SSL and hand out
+    a libpq-style ``?sslmode=require`` query param that asyncpg doesn't
+    understand. Strip it and enable SSL via ``connect_args`` instead — so you can
+    paste the provider's connection string verbatim into DATABASE_URL.
+    """
+    connect_args: dict = {}
+    if "+asyncpg" not in url:
+        return url, connect_args
+
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query))
+    sslmode = query.pop("sslmode", None)
+    ssl_q = query.pop("ssl", None)
+    host = parts.hostname or ""
+    wants_ssl = (
+        (sslmode not in (None, "disable"))
+        or (ssl_q not in (None, "false", "0", "disable"))
+        or (host not in ("localhost", "127.0.0.1", ""))
+    )
+    if wants_ssl:
+        connect_args["ssl"] = True
+    cleaned = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    return cleaned, connect_args
+
+
 _settings = get_settings()
-engine = create_async_engine(_settings.database_url, future=True)
+_url, _connect_args = _engine_config(_settings.database_url)
+engine = create_async_engine(_url, future=True, connect_args=_connect_args)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
