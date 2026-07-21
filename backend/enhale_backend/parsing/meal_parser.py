@@ -82,6 +82,13 @@ class MealParser:
 # --- helpers -----------------------------------------------------------------
 
 
+_MICRO_KEYS = (
+    "fiber_grams", "sugar_grams", "sodium_mg", "potassium_mg", "calcium_mg",
+    "iron_mg", "magnesium_mg", "zinc_mg", "vitamin_c_mg", "vitamin_d_mcg",
+    "vitamin_b12_mcg", "folate_mcg", "omega3_mg",
+)
+
+
 def _food_item(raw: dict) -> FoodItem:
     return FoodItem(
         name=raw["name"],
@@ -91,6 +98,7 @@ def _food_item(raw: dict) -> FoodItem:
         carb_grams=raw.get("carb_grams"),
         fat_grams=raw.get("fat_grams"),
         estimated=raw.get("estimated", True),
+        **{k: raw.get(k) for k in _MICRO_KEYS},
     )
 
 

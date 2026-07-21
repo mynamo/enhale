@@ -20,6 +20,19 @@ Return ONLY a JSON object (no prose, no code fences) with this shape:
       "protein_grams": number|null,
       "carb_grams": number|null,
       "fat_grams": number|null,
+      "fiber_grams": number|null,
+      "sugar_grams": number|null,
+      "sodium_mg": number|null,
+      "potassium_mg": number|null,
+      "calcium_mg": number|null,
+      "iron_mg": number|null,
+      "magnesium_mg": number|null,
+      "zinc_mg": number|null,
+      "vitamin_c_mg": number|null,
+      "vitamin_d_mcg": number|null,
+      "vitamin_b12_mcg": number|null,
+      "folate_mcg": number|null,
+      "omega3_mg": number|null,
       "estimated": boolean         // true unless the user stated exact numbers
     }
   ],
@@ -35,7 +48,10 @@ Rules:
 eaten_minutes_ago; if neither, leave both null (means "now").
 - Only set meal_type when stated or strongly implied; otherwise null.
 - Estimate nutrition for the described portion, but set estimated=true. If you \
-truly cannot estimate a field, use null rather than guessing wildly.\
+truly cannot estimate a field, use null rather than guessing wildly.
+- Estimate the micronutrients too (fiber, sugar, sodium, potassium, calcium, \
+iron, magnesium, zinc, vitamin C, vitamin D, vitamin B12, folate, omega-3) using \
+typical values for the food; null only when you truly cannot.\
 """
 
 

@@ -6,7 +6,6 @@ import EnhaleCore
 /// Dictation fills the same editable text field you can type into, so a failed
 /// or wrong transcription is always recoverable — fix the text, then log.
 struct VoiceLogView: View {
-    @EnvironmentObject private var store: MealStore
     @EnvironmentObject private var session: SessionManager
     @StateObject private var speech = SpeechRecognizer()
 
@@ -117,8 +116,8 @@ struct VoiceLogView: View {
         do {
             let meal = try await client.parseMeal(transcript: transcript)
             lastParsed = meal
-            store.add(meal)
-            text = "" // ready for the next entry
+            text = "" // ready for the next entry; it's persisted server-side and
+                      // shows up on the History tab.
         } catch EnhaleAPIClient.APIError.noFoodFound {
             errorMessage = "I didn't catch any food in that — try rephrasing?"
         } catch EnhaleAPIClient.APIError.unauthorized {

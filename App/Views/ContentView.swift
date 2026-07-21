@@ -9,8 +9,14 @@ struct ContentView: View {
                 VoiceLogView()
                     .tabItem { Label("Log", systemImage: "mic.fill") }
 
-                TodayView()
-                    .tabItem { Label("Today", systemImage: "list.bullet") }
+                HistoryView()
+                    .tabItem { Label("History", systemImage: "list.bullet") }
+
+                HealthView()
+                    .tabItem { Label("Health", systemImage: "heart.fill") }
+
+                InsightsView()
+                    .tabItem { Label("Insights", systemImage: "sparkles") }
 
                 SettingsView()
                     .tabItem { Label("Settings", systemImage: "gear") }

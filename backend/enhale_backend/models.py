@@ -57,6 +57,21 @@ class FoodItem(BaseModel):
     protein_grams: Optional[float] = None
     carb_grams: Optional[float] = None
     fat_grams: Optional[float] = None
+    # Micronutrients & other components (estimated). All optional — the model
+    # fills what it reasonably can and leaves the rest null.
+    fiber_grams: Optional[float] = None
+    sugar_grams: Optional[float] = None
+    sodium_mg: Optional[float] = None
+    potassium_mg: Optional[float] = None
+    calcium_mg: Optional[float] = None
+    iron_mg: Optional[float] = None
+    magnesium_mg: Optional[float] = None
+    zinc_mg: Optional[float] = None
+    vitamin_c_mg: Optional[float] = None
+    vitamin_d_mcg: Optional[float] = None
+    vitamin_b12_mcg: Optional[float] = None
+    folate_mcg: Optional[float] = None
+    omega3_mg: Optional[float] = None
     estimated: bool = True
 
 
