@@ -13,6 +13,27 @@ struct InsightsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    NavigationLink {
+                        AskView()
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Label("Ask enhale", systemImage: "questionmark.bubble").font(.headline)
+                                Text("Investigate a concern — e.g. why do I have grey hair?")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider()
+                    Text("Overall insights").font(.headline)
+
                     if isGenerating {
                         HStack { ProgressView(); Text("Analyzing your meals, activity, and labs…").foregroundStyle(.secondary) }
                             .padding(.top)

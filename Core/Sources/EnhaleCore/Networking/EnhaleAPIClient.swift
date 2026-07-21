@@ -162,6 +162,55 @@ public struct EnhaleAPIClient: Sendable {
         return try Self.decoder.decode([InsightReport].self, from: data)
     }
 
+    // MARK: - Profile & symptoms
+
+    public func getProfile() async throws -> UserProfile {
+        let data = try await send(path: "profile", method: "GET", body: Optional<Empty>.none, authorized: true)
+        return try Self.decoder.decode(UserProfile.self, from: data)
+    }
+
+    @discardableResult
+    public func putProfile(_ profile: UserProfile) async throws -> UserProfile {
+        let data = try await send(path: "profile", method: "PUT", body: profile, authorized: true)
+        return try Self.decoder.decode(UserProfile.self, from: data)
+    }
+
+    public func listSymptoms() async throws -> [SymptomLog] {
+        let data = try await send(path: "symptoms", method: "GET", body: Optional<Empty>.none, authorized: true)
+        return try Self.decoder.decode([SymptomLog].self, from: data)
+    }
+
+    @discardableResult
+    public func addSymptom(_ symptom: SymptomLog) async throws -> SymptomLog {
+        let data = try await send(path: "symptoms", method: "POST", body: symptom, authorized: true)
+        return try Self.decoder.decode(SymptomLog.self, from: data)
+    }
+
+    public func deleteSymptom(id: UUID) async throws {
+        _ = try await send(
+            path: "symptoms/\(id.uuidString.lowercased())", method: "DELETE",
+            body: Optional<Empty>.none, authorized: true
+        )
+    }
+
+    // MARK: - Investigation ("Ask enhale")
+
+    /// Investigate a concern against the user's whole dataset (LLM call).
+    public func investigate(concern: String) async throws -> InvestigationReport {
+        let data = try await send(
+            path: "investigate", method: "POST",
+            body: InvestigateRequest(concern: concern), authorized: true
+        )
+        return try Self.decoder.decode(InvestigationReport.self, from: data)
+    }
+
+    public func listInvestigations() async throws -> [InvestigationReport] {
+        let data = try await send(path: "investigate", method: "GET", body: Optional<Empty>.none, authorized: true)
+        return try Self.decoder.decode([InvestigationReport].self, from: data)
+    }
+
+    private struct InvestigateRequest: Encodable { let concern: String }
+
     // MARK: - Request plumbing
 
     private func send<Body: Encodable>(

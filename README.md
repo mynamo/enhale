@@ -229,6 +229,10 @@ backend/enhale_backend/
 | DELETE | `/bloodwork/{id}` | ✅ | delete a panel |
 | POST | `/insights/generate` | ✅ | synthesize recommendations from meals + health + labs |
 | GET | `/insights` | ✅ | list generated reports (newest first) |
+| GET / PUT | `/profile` | ✅ | user profile (age, sex, meds, supplements, family history) |
+| POST / GET / DELETE | `/symptoms` | ✅ | log / list / delete reported concerns |
+| POST | `/investigate` | ✅ | **Ask enhale** — concern → ranked hypotheses + data gaps + next steps |
+| GET | `/investigate` | ✅ | past investigations |
 
 **Persistence:** SQLAlchemy 2.0 async. Defaults to **SQLite** for zero-setup
 local dev; set `DATABASE_URL=postgresql+asyncpg://…` (and `pip install asyncpg`)
@@ -273,6 +277,10 @@ platform.
 - [x] Meal history — server-backed (iOS History tab reads from the backend)
 - [x] Blood-work ingestion — upload PDF/PNG/JPEG → Claude vision extracts markers
 - [x] Habit analysis + recommendations — Insights tab synthesizes meals + health + labs
+- [x] User profile + symptom logging (context: meds, supplements, family history, concerns)
+- [x] Micronutrient capture in meal parsing (fiber, iron, B12, vitamin D, …)
+- [x] Hybrid correlation engine — deterministic findings (timing, trends, lab trajectories) feed the LLM
+- [x] **"Ask enhale" investigation** — concern → ranked root-cause hypotheses + data-gap detection
 - [ ] Alembic migrations (replace create-all before prod schema changes)
 - [ ] Web app (TypeScript/React) against the same API
 - [ ] Android app (Kotlin) against the same API — Health Connect → same `/health/sync`

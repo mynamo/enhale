@@ -23,6 +23,16 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        ProfileView()
+                    } label: {
+                        Label("Profile & health context", systemImage: "person.text.rectangle")
+                    }
+                } footer: {
+                    Text("Your age, meds, supplements, family history, and symptoms — used to personalize insights and investigations.")
+                }
+
+                Section {
                     Button("Sign out", role: .destructive) {
                         session.logout()
                     }

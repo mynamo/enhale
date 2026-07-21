@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException
 from .bloodwork.extractor import BloodWorkExtractor
 from .config import Settings, get_settings
 from .insights.generator import InsightGenerator
+from .investigation.generator import InvestigationGenerator
 from .llm.anthropic_client import AnthropicLLMClient
 from .llm.anthropic_vision import AnthropicVisionClient
 from .parsing.meal_parser import MealParser
@@ -56,3 +57,17 @@ def get_insight_generator(
         max_tokens=4096,
     )
     return InsightGenerator(client)
+
+
+def get_investigation_generator(
+    settings: Settings = Depends(get_settings),
+) -> InvestigationGenerator:
+    """Build the 'Ask enhale' investigation generator. Overridable in tests."""
+    if not settings.anthropic_api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is not set")
+    client = AnthropicLLMClient(
+        api_key=settings.anthropic_api_key,
+        model=settings.anthropic_model,
+        max_tokens=4096,
+    )
+    return InvestigationGenerator(client)

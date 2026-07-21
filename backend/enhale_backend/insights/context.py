@@ -2,17 +2,68 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from ..bloodwork_models import BloodWorkPanel
 from ..health_models import HealthSummary
 from ..models import ParsedMeal
+from ..profile_models import SymptomLog, UserProfile
 
 
 def build_context(
     meals: list[ParsedMeal],
     health: HealthSummary,
     panels: list[BloodWorkPanel],
+    profile: Optional[UserProfile] = None,
+    symptoms: Optional[list[SymptomLog]] = None,
+    findings: Optional[list[str]] = None,
 ) -> str:
     sections: list[str] = []
+
+    # Profile (confounders matter — meds, supplements, smoking, family history)
+    if profile is not None:
+        p = []
+        from datetime import date as _date
+        if profile.birth_year:
+            p.append(f"age ~{_date.today().year - profile.birth_year}")
+        if profile.sex:
+            p.append(profile.sex)
+        if profile.height_cm:
+            p.append(f"{profile.height_cm:.0f} cm")
+        if profile.ethnicity:
+            p.append(profile.ethnicity)
+        if profile.smoking:
+            p.append(f"smoking: {profile.smoking}")
+        if profile.alcohol:
+            p.append(f"alcohol: {profile.alcohol}")
+        if profile.medications:
+            p.append("meds: " + ", ".join(profile.medications))
+        if profile.supplements:
+            p.append("supplements: " + ", ".join(profile.supplements))
+        if profile.conditions:
+            p.append("conditions: " + ", ".join(profile.conditions))
+        if profile.family_history:
+            p.append(f"family history: {profile.family_history}")
+        if p:
+            sections.append("PROFILE: " + "; ".join(p))
+
+    # Reported symptoms / concerns
+    if symptoms:
+        lines = []
+        for s in symptoms:
+            extra = []
+            if s.onset:
+                extra.append(f"since {s.onset}")
+            if s.severity:
+                extra.append(f"severity {s.severity}/5")
+            if s.notes:
+                extra.append(s.notes)
+            lines.append(f"- {s.name}" + (f" ({', '.join(extra)})" if extra else ""))
+        sections.append("REPORTED SYMPTOMS:\n" + "\n".join(lines))
+
+    # Computed findings first — the objective evidence
+    if findings:
+        sections.append("COMPUTED FINDINGS (deterministic analysis):\n" + "\n".join(f"- {f}" for f in findings))
 
     # Meals
     if meals:
