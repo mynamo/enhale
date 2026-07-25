@@ -45,9 +45,10 @@ Rules:
 - Rank hypotheses by how well the AVAILABLE evidence supports them, not just by \
 base rate. If a common cause can't be assessed because data is missing, say so \
 via "missing" and list it under data_gaps rather than marking it high.
-- Prefer 3-6 hypotheses. Always include data_gaps unless the picture is complete.
+- Provide AT MOST 6 hypotheses and AT MOST 8 data_gaps. Always include data_gaps \
+unless the picture is complete. Keep each field concise (1-3 sentences).
 - next_steps should be specific and actionable (labs to add, things to log, \
-habits to try, and when to see a provider).
+habits to try, and when to see a provider); at most 8 of them.
 """
 
 

@@ -58,7 +58,7 @@ def get_insight_generator(
     client = AnthropicLLMClient(
         api_key=settings.anthropic_api_key,
         model=settings.anthropic_model,
-        max_tokens=4096,
+        max_tokens=8192,
     )
     return InsightGenerator(client)
 
@@ -72,6 +72,6 @@ def get_investigation_generator(
     client = AnthropicLLMClient(
         api_key=settings.anthropic_api_key,
         model=settings.anthropic_model,
-        max_tokens=4096,
+        max_tokens=8192,
     )
     return InvestigationGenerator(client)
