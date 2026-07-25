@@ -40,6 +40,10 @@ def get_bloodwork_extractor(
     client = AnthropicVisionClient(
         api_key=settings.anthropic_api_key,
         model=settings.anthropic_model,
+        # Full lab panels (e.g. Function Health) have 100+ biomarkers; the JSON
+        # for all of them easily exceeds a small cap and would truncate → parse
+        # failure. Give it plenty of room (still under the non-streaming ceiling).
+        max_tokens=16000,
     )
     return BloodWorkExtractor(client)
 
