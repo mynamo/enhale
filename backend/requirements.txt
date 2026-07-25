@@ -3,6 +3,7 @@ uvicorn[standard]>=0.29
 anthropic>=0.40
 pydantic[email]>=2.6
 python-multipart>=0.0.9    # file uploads (blood work reports)
+pillow>=10.0               # downscale large photo uploads before vision extraction
 
 # Persistence
 sqlalchemy[asyncio]>=2.0

@@ -8,11 +8,15 @@ keep the footprint minimal).
 from __future__ import annotations
 
 import base64
+import io
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from ..auth.dependencies import get_current_user
 from ..bloodwork.extractor import BloodWorkExtractor
@@ -46,8 +50,20 @@ async def upload(
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
 
+    data, media_type = _downscale_if_image(data, media_type)
     b64 = base64.standard_b64encode(data).decode("ascii")
-    panel = await extractor.extract(file.filename or "upload", media_type, b64)
+    try:
+        panel = await extractor.extract(file.filename or "upload", media_type, b64)
+    except HTTPException:
+        raise
+    except Exception:
+        # Surfaces the real traceback in the server logs; returns a helpful,
+        # non-500 message so the user knows what to try instead.
+        logger.exception("Blood work extraction failed for %s (%s)", file.filename, media_type)
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't read that report. Try a clearer photo, a single page, or a smaller file.",
+        )
     panel.created_at = datetime.now(timezone.utc)
 
     session.add(
@@ -90,6 +106,28 @@ async def delete_panel(
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(row)
     await session.commit()
+
+
+def _downscale_if_image(data: bytes, media_type: str) -> tuple[bytes, str]:
+    """Phone photos are often several MB / 4000+ px, which can exceed the vision
+    API's per-image size limit and 500 the request. Downscale to a long edge the
+    model reads well and re-encode as JPEG. PDFs pass through untouched; if
+    anything fails we fall back to the original bytes."""
+    if media_type == "application/pdf":
+        return data, media_type
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        max_edge = 1568  # the vision API's optimal long edge
+        if max(img.size) > max_edge:
+            img.thumbnail((max_edge, max_edge))
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=85)
+        return out.getvalue(), "image/jpeg"
+    except Exception:
+        logger.warning("Image downscale failed; sending original bytes", exc_info=True)
+        return data, media_type
 
 
 def _media_type(file: UploadFile) -> str:
