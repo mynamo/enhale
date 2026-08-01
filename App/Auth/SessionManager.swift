@@ -13,9 +13,11 @@ final class SessionManager: ObservableObject {
         self.token = KeychainTokenStore.load()
     }
 
-    /// The backend base URL, configured in Settings (defaults to localhost).
+    /// The backend base URL, configured in Settings (defaults to the hosted
+    /// enhale backend so a fresh install works with no setup).
     private var baseURL: URL? {
-        let raw = UserDefaults.standard.string(forKey: "backendBaseURL") ?? "http://127.0.0.1:8000"
+        let raw = UserDefaults.standard.string(forKey: "backendBaseURL")
+            ?? "https://enhale-backend-production.up.railway.app"
         return URL(string: raw)
     }
 
