@@ -54,6 +54,9 @@ def _engine_config(url: str) -> tuple[str, dict]:
     # Disable asyncpg's prepared-statement cache so a PgBouncer/transaction-pooled
     # endpoint (e.g. Neon's "-pooler" host) works. Negligible cost for this app.
     connect_args["statement_cache_size"] = 0
+    # Bound the connect attempt so a misconfigured/unreachable DB fails fast and
+    # surfaces in the logs, instead of hanging (and failing the healthcheck).
+    connect_args["timeout"] = 15
     cleaned = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
     return cleaned, connect_args
 
