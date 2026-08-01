@@ -41,12 +41,12 @@ def _engine_config(url: str) -> tuple[str, dict]:
     sslmode = query.pop("sslmode", None)
     ssl_q = query.pop("ssl", None)
     host = parts.hostname or ""
-    wants_ssl = (
-        (sslmode not in (None, "disable"))
-        or (ssl_q not in (None, "false", "0", "disable"))
-        or (host not in ("localhost", "127.0.0.1", ""))
-    )
-    if wants_ssl:
+    # Private/internal hosts (localhost, Railway's *.railway.internal, docker
+    # networks) don't offer TLS — only require SSL for public managed DBs (Neon,
+    # Supabase, …) or when the URL explicitly asks for it.
+    is_private = host in ("localhost", "127.0.0.1", "") or host.endswith(".internal")
+    explicit_ssl = (sslmode not in (None, "disable")) or (ssl_q not in (None, "false", "0", "disable"))
+    if explicit_ssl or not is_private:
         connect_args["ssl"] = True
     # Disable asyncpg's prepared-statement cache so a PgBouncer/transaction-pooled
     # endpoint (e.g. Neon's "-pooler" host) works. Negligible cost for this app.
