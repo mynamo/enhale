@@ -37,7 +37,8 @@ Rules:
 - Base every observation and recommendation on the actual data provided; never \
 invent numbers or foods that aren't there.
 - If there's little data, say so and give a couple of gentle, general suggestions.
-- Prefer 3-6 focused recommendations over an exhaustive list.
+- Provide AT MOST 5 observations and 3-6 recommendations — focus on what matters \
+most, don't try to cover everything. Keep each field to 1-2 sentences.
 """
 
 

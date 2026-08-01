@@ -230,6 +230,30 @@ Notes (fine for personal use):
   disables the prepared-statement cache for pooled endpoints) — so you can paste
   Neon's string as-is.
 
+## Deploying (alternative): Railway
+
+Railway is a good alternative — it **doesn't sleep** (no cold-start delays) and
+deploys reliably on git push. It's not free (a ~$5 trial credit, then usage-based
+hobby plan), but it removes the free-tier friction.
+
+1. [railway.app](https://railway.app) → **New Project → Deploy from GitHub repo**
+   → select the `enhale` repo.
+2. Open the service → **Settings → Root Directory** = `backend` (the FastAPI app
+   lives there; Railway reads `backend/railway.json` for the start command).
+3. Add a database: **New → Database → PostgreSQL** (or use Neon).
+4. Service **Variables**:
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference the Postgres service),
+     or your Neon URL.
+   - `ANTHROPIC_API_KEY` = your key.
+   - `JWT_SECRET` = a long random string.
+   - (optional) `ANTHROPIC_MODEL` = `claude-opus-4-8`.
+5. **Settings → Networking → Generate Domain** → you get an HTTPS URL like
+   `https://enhale-backend-production.up.railway.app`. Check `…/health`.
+6. Put that URL in the app's **Backend URL**.
+
+The app normalizes the Postgres URL automatically — Railway's private
+`*.railway.internal` host is used without SSL, public/Neon hosts with SSL.
+
 ## backend/ — the reusable service
 
 ```
