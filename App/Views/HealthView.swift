@@ -31,19 +31,25 @@ struct HealthView: View {
                     }
                 }
 
-                if !todayStats.isEmpty {
-                    Section {
-                        statGrid(todayStats)
-                    } header: {
-                        Text("Today")
-                    }
+                Section {
+                    statGrid(nutritionStats)
+                } header: {
+                    Text("Nutrition · today")
                 }
 
-                if let summary, !summaryStats(summary).isEmpty {
+                if let summary {
                     Section {
-                        statGrid(summaryStats(summary))
+                        statGrid(workoutStats(summary))
                     } header: {
-                        Text("Last 14 days")
+                        Text("Activity · today")
+                    }
+
+                    if !sleepStats(summary).isEmpty {
+                        Section {
+                            statGrid(sleepStats(summary))
+                        } header: {
+                            Text("Sleep")
+                        }
                     }
                 }
 
@@ -118,7 +124,7 @@ struct HealthView: View {
     // MARK: - Sections
 
     @ViewBuilder private func workoutsSection(_ workouts: [WorkoutSample]) -> some View {
-        Section("Workouts") {
+        Section("Recent workouts") {
             if workouts.isEmpty {
                 Text("No workouts synced yet.").foregroundStyle(.secondary).font(.footnote)
             }
@@ -141,7 +147,7 @@ struct HealthView: View {
     }
 
     @ViewBuilder private func sleepSection(_ nights: [SleepNight]) -> some View {
-        Section("Sleep") {
+        Section("Recent sleep") {
             if nights.isEmpty {
                 Text("No sleep data synced yet.").foregroundStyle(.secondary).font(.footnote)
             }
@@ -265,7 +271,7 @@ struct HealthView: View {
 
     // MARK: - Summary stats
 
-    /// A card in the "Last 14 days" grid.
+    /// A card in a summary grid.
     private struct StatItem: Identifiable {
         let id = UUID()
         let icon: String
@@ -274,78 +280,85 @@ struct HealthView: View {
         let tint: Color
     }
 
-    /// Aggregate the synced summary into a few glanceable numbers. Only metrics
-    /// that actually have data produce a card.
-    private func summaryStats(_ s: HealthSummary) -> [StatItem] {
-        var items: [StatItem] = []
+    /// Nutrition today so far — total calories consumed and macronutrients from
+    /// the meals logged today.
+    private var nutritionStats: [StatItem] {
+        let todayMeals = meals.filter { Calendar.current.isDateInToday($0.eatenAt) }
+        let todayItems = todayMeals.flatMap(\.items)
+        let calories = todayMeals.reduce(0.0) { $0 + $1.totalCalories }
+        let protein = todayItems.compactMap(\.proteinGrams).reduce(0, +)
+        let carbs = todayItems.compactMap(\.carbGrams).reduce(0, +)
+        let fat = todayItems.compactMap(\.fatGrams).reduce(0, +)
+        return [
+            .init(icon: "fork.knife", title: "Calories", value: "\(Int(calories)) kcal", tint: .blue),
+            .init(icon: "bolt.fill", title: "Protein", value: "\(Int(protein)) g", tint: .purple),
+            .init(icon: "leaf.fill", title: "Carbs", value: "\(Int(carbs)) g", tint: .orange),
+            .init(icon: "drop.fill", title: "Fat", value: "\(Int(fat)) g", tint: .yellow),
+        ]
+    }
 
-        if !s.sleep.isEmpty {
-            let avg = s.sleep.map(\.asleepSeconds).reduce(0, +) / Double(s.sleep.count)
-            items.append(.init(icon: "bed.double.fill", title: "Avg sleep", value: Self.duration(avg), tint: .indigo))
+    /// Activity today — calories burned, steps, resting heart rate, and workout
+    /// count from Apple Health.
+    private func workoutStats(_ s: HealthSummary) -> [StatItem] {
+        let today = s.daily.first { $0.date == Self.todayKey }
+        let latestByDate = s.daily.sorted { $0.date > $1.date }
+
+        let workoutBurn = s.workouts
+            .filter { Calendar.current.isDateInToday($0.startAt) }
+            .compactMap(\.activeEnergyKcal).reduce(0, +)
+        let burned = today?.activeEnergyKcal ?? workoutBurn
+        let steps = today?.steps ?? latestByDate.compactMap(\.steps).first
+        let hr = today?.restingHeartRate ?? latestByDate.compactMap(\.restingHeartRate).first
+        let workoutsToday = s.workouts.filter { Calendar.current.isDateInToday($0.startAt) }.count
+
+        var items: [StatItem] = [
+            .init(icon: "flame.fill", title: "Calories burned", value: "\(Int(burned)) kcal", tint: .pink),
+            .init(icon: "shoeprints.fill", title: "Steps", value: (steps ?? 0).formatted(), tint: .green),
+        ]
+        if let hr {
+            items.append(.init(icon: "heart.fill", title: "Resting HR", value: "\(Int(hr)) bpm", tint: .red))
         }
-        if !s.workouts.isEmpty {
-            items.append(.init(icon: "figure.run", title: "Workouts", value: "\(s.workouts.count)", tint: .orange))
-        }
-        let steps = s.daily.compactMap(\.steps)
-        if !steps.isEmpty {
-            items.append(.init(icon: "shoeprints.fill", title: "Avg steps", value: (steps.reduce(0, +) / steps.count).formatted(), tint: .green))
-        }
-        let rhr = s.daily.compactMap(\.restingHeartRate)
-        if !rhr.isEmpty {
-            let avg = rhr.reduce(0, +) / Double(rhr.count)
-            items.append(.init(icon: "heart.fill", title: "Resting HR", value: "\(Int(avg)) bpm", tint: .red))
-        }
-        let energy = s.daily.compactMap(\.activeEnergyKcal)
-        if !energy.isEmpty {
-            let avg = energy.reduce(0, +) / Double(energy.count)
-            items.append(.init(icon: "flame.fill", title: "Avg active", value: "\(Int(avg)) kcal", tint: .pink))
-        }
-        if let weight = s.daily.sorted(by: { $0.date > $1.date }).compactMap(\.bodyMassKg).first {
-            items.append(.init(icon: "scalemass.fill", title: "Weight", value: String(format: "%.1f kg", weight), tint: .teal))
-        }
-        // Average daily calorie intake, computed from logged meals over the window.
-        let byDay = Dictionary(grouping: meals) { Calendar.current.startOfDay(for: $0.eatenAt) }
-        if !byDay.isEmpty {
-            let perDay = byDay.values.map { day in day.reduce(0.0) { $0 + $1.totalCalories } }
-            let avg = perDay.reduce(0, +) / Double(perDay.count)
-            items.append(.init(icon: "fork.knife", title: "Avg cal/day", value: "\(Int(avg)) kcal", tint: .blue))
+        items.append(.init(icon: "figure.run", title: "Workouts", value: "\(workoutsToday)", tint: .orange))
+        return items
+    }
+
+    /// Sleep — average hours over the window and a score for last night.
+    private func sleepStats(_ s: HealthSummary) -> [StatItem] {
+        guard !s.sleep.isEmpty else { return [] }
+        let avg = s.sleep.map(\.asleepSeconds).reduce(0, +) / Double(s.sleep.count)
+        var items: [StatItem] = [
+            .init(icon: "bed.double.fill", title: "Avg hours", value: Self.duration(avg), tint: .indigo)
+        ]
+        if let lastNight = s.sleep.max(by: { $0.date < $1.date }) {
+            items.append(.init(icon: "moon.stars.fill", title: "Sleep score", value: "\(Self.sleepScore(lastNight))", tint: .mint))
         }
         return items
     }
 
-    /// "Today so far": intake + macros from today's logged meals, plus calories
-    /// burned and last night's sleep from Apple Health.
-    private var todayStats: [StatItem] {
-        var items: [StatItem] = []
-        let todayMeals = meals.filter { Calendar.current.isDateInToday($0.eatenAt) }
-        let todayItems = todayMeals.flatMap(\.items)
+    /// A 0–100 heuristic sleep score for one night: duration vs an 8h target,
+    /// efficiency (asleep / in-bed), and restorative share (deep + REM). Apple
+    /// Health has no native score, so this is our own composite.
+    private static func sleepScore(_ n: SleepNight) -> Int {
+        let hours = n.asleepSeconds / 3600
+        let duration = min(hours / 8, 1)
 
-        let calories = todayMeals.reduce(0.0) { $0 + $1.totalCalories }
-        items.append(.init(icon: "fork.knife", title: "Calories in", value: "\(Int(calories)) kcal", tint: .blue))
-
-        let protein = todayItems.compactMap(\.proteinGrams).reduce(0, +)
-        let carbs = todayItems.compactMap(\.carbGrams).reduce(0, +)
-        let fat = todayItems.compactMap(\.fatGrams).reduce(0, +)
-        if protein + carbs + fat > 0 {
-            items.append(.init(icon: "bolt.fill", title: "Protein", value: "\(Int(protein)) g", tint: .purple))
-            items.append(.init(icon: "leaf.fill", title: "Carbs", value: "\(Int(carbs)) g", tint: .orange))
-            items.append(.init(icon: "drop.fill", title: "Fat", value: "\(Int(fat)) g", tint: .yellow))
+        var efficiency = 1.0
+        if let inBed = n.inBedSeconds, inBed > 0 {
+            efficiency = min(n.asleepSeconds / inBed, 1)
         }
 
-        if let summary {
-            let todayDaily = summary.daily.first { $0.date == Self.todayKey }
-            let workoutBurn = summary.workouts
-                .filter { Calendar.current.isDateInToday($0.startAt) }
-                .compactMap(\.activeEnergyKcal).reduce(0, +)
-            let burned = todayDaily?.activeEnergyKcal ?? workoutBurn
-            if burned > 0 {
-                items.append(.init(icon: "flame.fill", title: "Burned", value: "\(Int(burned)) kcal", tint: .pink))
-            }
-            if let lastNight = summary.sleep.max(by: { $0.date < $1.date }) {
-                items.append(.init(icon: "bed.double.fill", title: "Sleep", value: Self.duration(lastNight.asleepSeconds), tint: .indigo))
-            }
+        let restorative = (n.deepSeconds ?? 0) + (n.remSeconds ?? 0)
+        let hasStages = n.deepSeconds != nil || n.remSeconds != nil
+        let score: Double
+        if hasStages, n.asleepSeconds > 0 {
+            // 60% duration, 20% efficiency, 20% restorative (target ~40% of sleep).
+            let restShare = min((restorative / n.asleepSeconds) / 0.4, 1)
+            score = duration * 60 + efficiency * 20 + restShare * 20
+        } else {
+            // No stage data — weight duration and efficiency to fill 100.
+            score = duration * 75 + efficiency * 25
         }
-        return items
+        return Int(score.rounded())
     }
 
     /// Today's local calendar day as a `yyyy-MM-dd` key, matching the format the
