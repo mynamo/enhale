@@ -221,10 +221,21 @@ struct HealthView: View {
             // spinning indefinitely.
             let result = try await client.syncHealth(request, timeout: 45)
             lastHealthSyncAt = Date().timeIntervalSince1970
-            let message = "Synced \(result.workoutsUpserted) workouts, \(result.sleepUpserted) nights, \(result.dailyUpserted) days."
+            let total = result.workoutsUpserted + result.sleepUpserted + result.dailyUpserted
             if !auto {
-                status = message
-                await NotificationManager.shared.notify(title: "Health synced", body: message)
+                if total == 0 {
+                    // Sync worked but Apple Health returned nothing — almost always
+                    // a permissions/device issue, not a server one.
+                    status = "Synced, but Apple Health returned no data. Open Settings → Privacy & Security → Health → enhale and turn on the categories. Health data also needs a real iPhone (the Simulator has none)."
+                    await NotificationManager.shared.notify(
+                        title: "No Health data found",
+                        body: "Enable enhale in Settings → Privacy → Health, then sync again."
+                    )
+                } else {
+                    let message = "Synced \(result.workoutsUpserted) workouts, \(result.sleepUpserted) nights, \(result.dailyUpserted) days."
+                    status = message
+                    await NotificationManager.shared.notify(title: "Health synced", body: message)
+                }
             }
             await loadSummary()
         } catch EnhaleAPIClient.APIError.unauthorized {
