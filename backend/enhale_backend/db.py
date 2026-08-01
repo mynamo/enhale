@@ -7,6 +7,7 @@ Postgres (prod) with only an env-var change.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -18,6 +19,8 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from .config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -75,14 +78,28 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
-async def init_db() -> None:
-    """Create tables from the ORM metadata.
+async def init_db(retries: int = 6, delay: float = 2.0) -> None:
+    """Create tables from the ORM metadata, retrying while the database comes up.
 
-    Fine for dev/MVP. Before making schema changes in production, switch to
-    Alembic migrations (already a declared dependency) instead of create_all.
+    On managed platforms the DB may not be reachable the instant the app boots
+    (startup race). Retrying with a short backoff avoids a crash-on-boot that
+    would fail the platform healthcheck. Fine for dev/MVP; switch to Alembic
+    migrations before making schema changes in production.
     """
+    import asyncio
+
     # Import models so they're registered on Base.metadata before create_all.
     from . import db_models  # noqa: F401
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            return
+        except Exception as exc:  # noqa: BLE001 — retry any connection/setup error
+            last_error = exc
+            logger.warning("init_db attempt %d/%d failed: %s", attempt, retries, exc)
+            if attempt < retries:
+                await asyncio.sleep(delay)
+    raise RuntimeError(f"Database not reachable after {retries} attempts") from last_error
