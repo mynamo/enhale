@@ -12,35 +12,33 @@ struct HistoryView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if meals.isEmpty && !isLoading {
-                    ContentUnavailableView(
-                        "No meals yet",
-                        systemImage: "fork.knife",
-                        description: Text(errorMessage ?? "Log a meal on the Log tab and it'll show up here.")
-                    )
-                } else {
-                    List {
-                        ForEach(byDay, id: \.day) { group in
-                            Section {
-                                ForEach(group.meals) { meal in
-                                    MealRow(meal: meal)
-                                }
-                                .onDelete { offsets in
-                                    delete(offsets.map { group.meals[$0] })
-                                }
-                            } header: {
-                                dayHeader(group)
+        Group {
+            if meals.isEmpty && !isLoading {
+                ContentUnavailableView(
+                    "No meals yet",
+                    systemImage: "fork.knife",
+                    description: Text(errorMessage ?? "Log a meal on the Log tab and it'll show up here.")
+                )
+            } else {
+                List {
+                    ForEach(byDay, id: \.day) { group in
+                        Section {
+                            ForEach(group.meals) { meal in
+                                MealRow(meal: meal)
                             }
+                            .onDelete { offsets in
+                                delete(offsets.map { group.meals[$0] })
+                            }
+                        } header: {
+                            dayHeader(group)
                         }
                     }
-                    .refreshable { await load() }
                 }
+                .refreshable { await load() }
             }
-            .navigationTitle("History")
-            .onAppear { Task { await load() } }
         }
+        .navigationTitle("History")
+        .onAppear { Task { await load() } }
     }
 
     private func dayHeader(_ group: (day: Date, meals: [ParsedMeal])) -> some View {
@@ -85,7 +83,9 @@ struct HistoryView: View {
     }
 }
 
-private struct MealRow: View {
+/// A single meal row — reused on the History screen and the Log screen's
+/// "Recent" section.
+struct MealRow: View {
     let meal: ParsedMeal
 
     var body: some View {

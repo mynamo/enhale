@@ -13,65 +13,63 @@ struct VoiceLogView: View {
     @State private var isParsing = false
     @State private var lastParsed: ParsedMeal?
     @State private var errorMessage: String?
+    @State private var recentMeals: [ParsedMeal] = []
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Spacer()
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Editable field — works for typing, dictation, or editing a
+                    // transcription before logging.
+                    TextField("What did you eat? Speak or type…", text: $text, axis: .vertical)
+                        .lineLimit(2...5)
+                        .textFieldStyle(.plain)
+                        .font(.title3)
+                        .focused($fieldFocused)
+                        .padding()
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
-                // Editable field — works for typing, dictation, or editing a
-                // transcription before logging.
-                TextField("What did you eat? Speak or type…", text: $text, axis: .vertical)
-                    .lineLimit(2...5)
-                    .textFieldStyle(.plain)
-                    .font(.title3)
-                    .focused($fieldFocused)
-                    .padding()
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
+                    // Dictate button — fills the field above; edit afterward.
+                    Button(action: toggleRecording) {
+                        Label(
+                            speech.isRecording ? "Stop dictation" : "Dictate",
+                            systemImage: speech.isRecording ? "stop.circle.fill" : "mic.fill"
+                        )
+                        .foregroundStyle(speech.isRecording ? .red : .accentColor)
+                    }
 
-                // Dictate button — fills the field above; edit afterward if needed.
-                Button(action: toggleRecording) {
-                    Label(
-                        speech.isRecording ? "Stop dictation" : "Dictate",
-                        systemImage: speech.isRecording ? "stop.circle.fill" : "mic.fill"
-                    )
-                    .foregroundStyle(speech.isRecording ? .red : .accentColor)
+                    if isParsing {
+                        ProgressView("Understanding…")
+                    }
+
+                    if let meal = lastParsed {
+                        ParsedMealCard(meal: meal)
+                    }
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+
+                    Button {
+                        fieldFocused = false
+                        Task { await logMeal() }
+                    } label: {
+                        Text("Log meal")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isParsing)
+
+                    recentSection
                 }
-
-                if isParsing {
-                    ProgressView("Understanding…")
-                }
-
-                if let meal = lastParsed {
-                    ParsedMealCard(meal: meal)
-                        .padding(.horizontal)
-                }
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal)
-                }
-
-                Spacer()
-
-                Button {
-                    fieldFocused = false
-                    Task { await logMeal() }
-                } label: {
-                    Text("Log meal")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isParsing)
-                .padding(.horizontal)
-                .padding(.bottom, 24)
+                .padding()
             }
             .navigationTitle("Log a meal")
+            .task { await loadRecent() }
             .toolbar {
                 // Clear the current entry if you change your mind before logging.
                 ToolbarItem(placement: .topBarTrailing) {
@@ -89,6 +87,38 @@ struct VoiceLogView: View {
             .onChange(of: speech.transcript) { _, newValue in
                 if speech.isRecording { text = newValue }
             }
+        }
+    }
+
+    /// Recent meals with a link to the full history (History is no longer a
+    /// tab — it lives here now).
+    @ViewBuilder private var recentSection: some View {
+        if !recentMeals.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Recent").font(.headline)
+                    Spacer()
+                    NavigationLink {
+                        HistoryView()
+                    } label: {
+                        Text("See all history").font(.subheadline)
+                    }
+                }
+                .padding(.bottom, 4)
+
+                ForEach(Array(recentMeals.prefix(4).enumerated()), id: \.element.id) { index, meal in
+                    MealRow(meal: meal)
+                    if index < min(recentMeals.count, 4) - 1 { Divider() }
+                }
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    private func loadRecent() async {
+        guard let client = session.makeClient() else { return }
+        if let meals = try? await client.listMeals() {
+            recentMeals = meals.sorted { $0.eatenAt > $1.eatenAt }
         }
     }
 
@@ -148,8 +178,8 @@ struct VoiceLogView: View {
         do {
             let meal = try await client.parseMeal(transcript: transcript)
             lastParsed = meal
-            text = "" // ready for the next entry; it's persisted server-side and
-                      // shows up on the History tab.
+            text = "" // ready for the next entry; it's persisted server-side.
+            await loadRecent() // refresh the Recent list below.
         } catch EnhaleAPIClient.APIError.noFoodFound {
             errorMessage = "I didn't catch any food in that — try rephrasing?"
         } catch EnhaleAPIClient.APIError.unauthorized {
