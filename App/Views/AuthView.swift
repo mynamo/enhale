@@ -3,12 +3,12 @@ import EnhaleCore
 
 /// Sign-in / sign-up screen shown until the user has a valid session.
 ///
-/// The backend URL is configurable here (not only in Settings) because Settings
-/// lives behind the login wall — you need to be able to point the app at your
-/// server *before* you can authenticate.
+/// The app ships pointed at the hosted enhale backend, so there's nothing to
+/// configure here. The Backend URL override lives in Settings (behind login) for
+/// local development.
 struct AuthView: View {
     @EnvironmentObject private var session: SessionManager
-    @AppStorage("backendBaseURL") private var backendBaseURL = "http://127.0.0.1:8000"
+    @AppStorage("backendBaseURL") private var backendBaseURL = SessionManager.defaultBackendURL
 
     @State private var email = ""
     @State private var password = ""
@@ -44,18 +44,6 @@ struct AuthView: View {
                         errorMessage = nil
                     }
                     .font(.footnote)
-                }
-
-                Section {
-                    TextField("http://127.0.0.1:8000", text: $backendBaseURL)
-                        .textContentType(.URL)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } header: {
-                    Text("Backend URL")
-                } footer: {
-                    Text("Where the enhale backend is running. On the simulator use http://127.0.0.1:<port> (127.0.0.1, not localhost). On a device, use your Mac's Wi-Fi IP.")
                 }
             }
             .navigationTitle(isRegistering ? "Create account" : "Welcome to enhale")
