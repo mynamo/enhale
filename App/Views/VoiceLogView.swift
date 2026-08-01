@@ -72,11 +72,43 @@ struct VoiceLogView: View {
                 .padding(.bottom, 24)
             }
             .navigationTitle("Log a meal")
+            .toolbar {
+                // Clear the current entry if you change your mind before logging.
+                ToolbarItem(placement: .topBarTrailing) {
+                    if hasEntry {
+                        Button("Clear", role: .destructive) { clearEntry() }
+                    }
+                }
+                // Dismiss the keyboard without needing a return key.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { fieldFocused = false }
+                }
+            }
             // Mirror live dictation into the editable field while recording.
             .onChange(of: speech.transcript) { _, newValue in
                 if speech.isRecording { text = newValue }
             }
         }
+    }
+
+    /// True when there's something worth clearing (typed text, a live
+    /// dictation, or a just-parsed meal card).
+    private var hasEntry: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || lastParsed != nil
+            || speech.isRecording
+    }
+
+    /// Reset the screen to its empty state. Note: this only clears the
+    /// in-progress entry — meals already logged are saved server-side and stay
+    /// on the History tab.
+    private func clearEntry() {
+        if speech.isRecording { speech.stopRecording() }
+        text = ""
+        lastParsed = nil
+        errorMessage = nil
+        fieldFocused = false
     }
 
     private func toggleRecording() {
