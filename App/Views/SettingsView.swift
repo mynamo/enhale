@@ -8,6 +8,13 @@ struct SettingsView: View {
     @EnvironmentObject private var session: SessionManager
     @AppStorage("backendBaseURL") private var backendBaseURL = "http://127.0.0.1:8000"
 
+    /// The backend serves the privacy policy at `/privacy`.
+    private var privacyURL: URL? {
+        let base = backendBaseURL.trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return URL(string: base + "/privacy")
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -30,6 +37,16 @@ struct SettingsView: View {
                     }
                 } footer: {
                     Text("Your age, meds, supplements, family history, and symptoms — used to personalize insights and investigations.")
+                }
+
+                Section {
+                    if let privacyURL {
+                        Link(destination: privacyURL) {
+                            Label("Privacy Policy", systemImage: "hand.raised.fill")
+                        }
+                    }
+                } footer: {
+                    Text("What enhale collects and how it's used. We never use your health data for ads and never sell it.")
                 }
 
                 Section {

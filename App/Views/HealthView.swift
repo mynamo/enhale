@@ -11,6 +11,8 @@ struct HealthView: View {
     @State private var isSyncing = false
     @State private var status: String?
     @State private var errorMessage: String?
+    @State private var showPrimer = false
+    @AppStorage("didShowHealthPrimer") private var didShowHealthPrimer = false
 
     var body: some View {
         NavigationStack {
@@ -23,7 +25,7 @@ struct HealthView: View {
                 }
 
                 Section {
-                    Button { Task { await sync() } } label: {
+                    Button { startSync() } label: {
                         HStack {
                             Label("Sync Apple Health", systemImage: "heart.fill")
                             Spacer()
@@ -51,6 +53,16 @@ struct HealthView: View {
             }
             .navigationTitle("Health")
             .task { await loadSummary() }
+            .sheet(isPresented: $showPrimer) {
+                HealthPermissionPrimer(
+                    onContinue: {
+                        didShowHealthPrimer = true
+                        showPrimer = false
+                        Task { await sync() }
+                    },
+                    onCancel: { showPrimer = false }
+                )
+            }
         }
     }
 
@@ -115,6 +127,16 @@ struct HealthView: View {
     }
 
     // MARK: - Actions
+
+    /// Show the plain-language primer before the first HealthKit prompt; after
+    /// that, sync directly.
+    private func startSync() {
+        if didShowHealthPrimer {
+            Task { await sync() }
+        } else {
+            showPrimer = true
+        }
+    }
 
     private func sync() async {
         errorMessage = nil
