@@ -93,6 +93,19 @@ public struct EnhaleAPIClient: Sendable {
         return try Self.decoder.decode([ParsedMeal].self, from: data)
     }
 
+    /// Edit a stored meal. The backend merges the editable fields into the saved
+    /// payload, preserving micronutrient detail the client doesn't carry.
+    @discardableResult
+    public func updateMeal(_ meal: ParsedMeal) async throws -> ParsedMeal {
+        let data = try await send(
+            path: "meals/\(meal.id.uuidString.lowercased())",
+            method: "PUT",
+            body: meal,
+            authorized: true
+        )
+        return try Self.decoder.decode(ParsedMeal.self, from: data)
+    }
+
     /// Delete one of the signed-in user's meals.
     public func deleteMeal(id: UUID) async throws {
         _ = try await send(
@@ -104,9 +117,11 @@ public struct EnhaleAPIClient: Sendable {
     // MARK: - Health
 
     /// Push HealthKit-derived data to the backend (idempotent upsert).
+    /// - Parameter timeout: fail the request after this many seconds instead of
+    ///   hanging (Health syncs can stall on a cold backend or flaky network).
     @discardableResult
-    public func syncHealth(_ request: HealthSyncRequest) async throws -> HealthSyncResult {
-        let data = try await send(path: "health/sync", method: "POST", body: request, authorized: true)
+    public func syncHealth(_ request: HealthSyncRequest, timeout: TimeInterval = 45) async throws -> HealthSyncResult {
+        let data = try await send(path: "health/sync", method: "POST", body: request, authorized: true, timeout: timeout)
         return try Self.decoder.decode(HealthSyncResult.self, from: data)
     }
 
@@ -231,10 +246,12 @@ public struct EnhaleAPIClient: Sendable {
         path: String,
         method: String,
         body: Body?,
-        authorized: Bool
+        authorized: Bool,
+        timeout: TimeInterval? = nil
     ) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = method
+        if let timeout { request.timeoutInterval = timeout }
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try Self.encoder.encode(body)

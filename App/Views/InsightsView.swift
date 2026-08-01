@@ -13,6 +13,31 @@ struct InsightsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    // Overall insights — tap to generate a report from meals +
+                    // health + labs. Sits above Ask enhale.
+                    Button { Task { await generate() } } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Label(report == nil ? "Overall insights" : "Refresh insights", systemImage: "sparkles")
+                                    .font(.headline)
+                                Text("Personalized recommendations from your meals, activity, and labs.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if isGenerating {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isGenerating)
+
+                    // Ask enhale — deeper, concern-driven investigation.
                     NavigationLink {
                         AskView()
                     } label: {
@@ -31,12 +56,9 @@ struct InsightsView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Divider()
-                    Text("Overall insights").font(.headline)
-
                     if isGenerating {
-                        HStack { ProgressView(); Text("Analyzing your meals, activity, and labs…").foregroundStyle(.secondary) }
-                            .padding(.top)
+                        Text("Analyzing your meals, activity, and labs…")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
 
                     if let errorMessage {
@@ -44,12 +66,13 @@ struct InsightsView: View {
                     }
 
                     if let report {
+                        Divider()
                         reportView(report)
                     } else if !isGenerating {
                         ContentUnavailableView {
                             Label("No insights yet", systemImage: "sparkles")
                         } description: {
-                            Text("Once you've logged some meals and synced Apple Health, generate personalized recommendations.")
+                            Text("Tap “Overall insights” above to generate personalized recommendations from your logged meals, Apple Health, and labs.")
                         }
                         .padding(.top, 40)
                     }
@@ -58,12 +81,7 @@ struct InsightsView: View {
             }
             .navigationTitle("Insights")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await generate() } } label: {
-                        Label("Generate", systemImage: "sparkles")
-                    }
-                    .disabled(isGenerating)
-                }
+                ToolbarItem(placement: .topBarTrailing) { EnhaleLogo() }
             }
             .onAppear { Task { await loadLatest() } }
         }

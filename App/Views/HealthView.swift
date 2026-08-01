@@ -8,6 +8,7 @@ struct HealthView: View {
     @StateObject private var health = HealthKitService()
 
     @State private var summary: HealthSummary?
+    @State private var meals: [ParsedMeal] = []
     @State private var isSyncing = false
     @State private var status: String?
     @State private var errorMessage: String?
@@ -30,18 +31,17 @@ struct HealthView: View {
                     }
                 }
 
+                if !todayStats.isEmpty {
+                    Section {
+                        statGrid(todayStats)
+                    } header: {
+                        Text("Today")
+                    }
+                }
+
                 if let summary, !summaryStats(summary).isEmpty {
                     Section {
-                        LazyVGrid(
-                            columns: [GridItem(.flexible()), GridItem(.flexible())],
-                            spacing: 12
-                        ) {
-                            ForEach(summaryStats(summary)) {
-                                StatCard(icon: $0.icon, title: $0.title, value: $0.value, tint: $0.tint)
-                            }
-                        }
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                        .listRowBackground(Color.clear)
+                        statGrid(summaryStats(summary))
                     } header: {
                         Text("Last 14 days")
                     }
@@ -79,12 +79,18 @@ struct HealthView: View {
                 }
             }
             .navigationTitle("Health")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { EnhaleLogo() }
+            }
             .task {
                 await loadSummary()
+                await loadMeals()
                 await autoSyncIfDue()
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { Task { await autoSyncIfDue() } }
+                if phase == .active {
+                    Task { await loadMeals(); await autoSyncIfDue() }
+                }
             }
             .sheet(isPresented: $showPrimer) {
                 HealthPermissionPrimer(
@@ -97,6 +103,16 @@ struct HealthView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Stat grid
+
+    @ViewBuilder private func statGrid(_ items: [StatItem]) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(items) { StatCard(icon: $0.icon, title: $0.title, value: $0.value, tint: $0.tint) }
+        }
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
     }
 
     // MARK: - Sections
@@ -191,30 +207,60 @@ struct HealthView: View {
             if !auto { errorMessage = "Set a valid backend URL first." }
             return
         }
+        // Ask for notification permission on the first manual sync so we can post
+        // the success/failure banner.
+        if !auto { await NotificationManager.shared.requestAuthorization() }
         isSyncing = true
         defer { isSyncing = false }
         do {
             try await health.requestAuthorization()
             let request = try await health.buildSyncRequest(daysBack: 30)
-            let result = try await client.syncHealth(request)
+            // 45s network timeout so a cold/slow backend fails fast instead of
+            // spinning indefinitely.
+            let result = try await client.syncHealth(request, timeout: 45)
             lastHealthSyncAt = Date().timeIntervalSince1970
+            let message = "Synced \(result.workoutsUpserted) workouts, \(result.sleepUpserted) nights, \(result.dailyUpserted) days."
             if !auto {
-                status = "Synced \(result.workoutsUpserted) workouts, \(result.sleepUpserted) nights, \(result.dailyUpserted) days."
+                status = message
+                await NotificationManager.shared.notify(title: "Health synced", body: message)
             }
             await loadSummary()
         } catch EnhaleAPIClient.APIError.unauthorized {
             errorMessage = "Your session expired — please sign in again."
             session.logout()
         } catch {
-            // Auto-sync fails silently (e.g. offline) — the manual button and the
-            // last-synced timestamp still tell the user what's going on.
-            if !auto { errorMessage = "Couldn't sync: \(error.localizedDescription)" }
+            // Auto-sync fails silently (e.g. offline); a manual sync reports it
+            // both inline and as a notification.
+            let reason = Self.friendlySyncError(error)
+            if !auto {
+                errorMessage = reason
+                await NotificationManager.shared.notify(title: "Health sync failed", body: reason)
+            }
         }
+    }
+
+    private static func friendlySyncError(_ error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return "Sync timed out — the server may be waking up. Try again in a moment."
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "No internet connection — check your network and try again."
+            default:
+                break
+            }
+        }
+        return "Couldn't sync: \(error.localizedDescription)"
     }
 
     private func loadSummary() async {
         guard let client = session.makeClient() else { return }
         summary = try? await client.healthSummary(days: 14)
+    }
+
+    private func loadMeals() async {
+        guard let client = session.makeClient() else { return }
+        if let fetched = try? await client.listMeals() { meals = fetched }
     }
 
     // MARK: - Summary stats
@@ -257,7 +303,58 @@ struct HealthView: View {
         if let weight = s.daily.sorted(by: { $0.date > $1.date }).compactMap(\.bodyMassKg).first {
             items.append(.init(icon: "scalemass.fill", title: "Weight", value: String(format: "%.1f kg", weight), tint: .teal))
         }
+        // Average daily calorie intake, computed from logged meals over the window.
+        let byDay = Dictionary(grouping: meals) { Calendar.current.startOfDay(for: $0.eatenAt) }
+        if !byDay.isEmpty {
+            let perDay = byDay.values.map { day in day.reduce(0.0) { $0 + $1.totalCalories } }
+            let avg = perDay.reduce(0, +) / Double(perDay.count)
+            items.append(.init(icon: "fork.knife", title: "Avg cal/day", value: "\(Int(avg)) kcal", tint: .blue))
+        }
         return items
+    }
+
+    /// "Today so far": intake + macros from today's logged meals, plus calories
+    /// burned and last night's sleep from Apple Health.
+    private var todayStats: [StatItem] {
+        var items: [StatItem] = []
+        let todayMeals = meals.filter { Calendar.current.isDateInToday($0.eatenAt) }
+        let todayItems = todayMeals.flatMap(\.items)
+
+        let calories = todayMeals.reduce(0.0) { $0 + $1.totalCalories }
+        items.append(.init(icon: "fork.knife", title: "Calories in", value: "\(Int(calories)) kcal", tint: .blue))
+
+        let protein = todayItems.compactMap(\.proteinGrams).reduce(0, +)
+        let carbs = todayItems.compactMap(\.carbGrams).reduce(0, +)
+        let fat = todayItems.compactMap(\.fatGrams).reduce(0, +)
+        if protein + carbs + fat > 0 {
+            items.append(.init(icon: "bolt.fill", title: "Protein", value: "\(Int(protein)) g", tint: .purple))
+            items.append(.init(icon: "leaf.fill", title: "Carbs", value: "\(Int(carbs)) g", tint: .orange))
+            items.append(.init(icon: "drop.fill", title: "Fat", value: "\(Int(fat)) g", tint: .yellow))
+        }
+
+        if let summary {
+            let todayDaily = summary.daily.first { $0.date == Self.todayKey }
+            let workoutBurn = summary.workouts
+                .filter { Calendar.current.isDateInToday($0.startAt) }
+                .compactMap(\.activeEnergyKcal).reduce(0, +)
+            let burned = todayDaily?.activeEnergyKcal ?? workoutBurn
+            if burned > 0 {
+                items.append(.init(icon: "flame.fill", title: "Burned", value: "\(Int(burned)) kcal", tint: .pink))
+            }
+            if let lastNight = summary.sleep.max(by: { $0.date < $1.date }) {
+                items.append(.init(icon: "bed.double.fill", title: "Sleep", value: Self.duration(lastNight.asleepSeconds), tint: .indigo))
+            }
+        }
+        return items
+    }
+
+    /// Today's local calendar day as a `yyyy-MM-dd` key, matching the format the
+    /// device uses for `DailyMetric.date`.
+    private static var todayKey: String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
     }
 
     // MARK: - Formatting

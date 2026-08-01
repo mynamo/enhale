@@ -47,6 +47,9 @@ struct AuthView: View {
                 }
             }
             .navigationTitle(isRegistering ? "Create account" : "Welcome to enhale")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { EnhaleLogo() }
+            }
             .overlay { if isBusy { ProgressView() } }
         }
     }

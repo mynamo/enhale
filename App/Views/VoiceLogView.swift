@@ -11,9 +11,11 @@ struct VoiceLogView: View {
 
     @State private var text = ""
     @State private var isParsing = false
-    @State private var lastParsed: ParsedMeal?
     @State private var errorMessage: String?
     @State private var recentMeals: [ParsedMeal] = []
+    @State private var showSuccess = false
+    @State private var showFailure = false
+    @State private var failureMessage = ""
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -43,10 +45,6 @@ struct VoiceLogView: View {
                         ProgressView("Understanding…")
                     }
 
-                    if let meal = lastParsed {
-                        ParsedMealCard(meal: meal)
-                    }
-
                     if let errorMessage {
                         Text(errorMessage)
                             .font(.footnote)
@@ -71,8 +69,17 @@ struct VoiceLogView: View {
             .navigationTitle("Log a meal")
             .task { await loadRecent() }
             .toolbar {
-                // Clear the current entry if you change your mind before logging.
+                // Open the full meal history (History is no longer a tab).
                 ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        HistoryView()
+                    } label: {
+                        Label("History", systemImage: "clock.arrow.circlepath")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                // Clear the current entry if you change your mind before logging.
+                ToolbarItem(placement: .topBarLeading) {
                     if hasEntry {
                         Button("Clear", role: .destructive) { clearEntry() }
                     }
@@ -87,6 +94,18 @@ struct VoiceLogView: View {
             .onChange(of: speech.transcript) { _, newValue in
                 if speech.isRecording { text = newValue }
             }
+            .alert("Meal logged successfully", isPresented: $showSuccess) {
+                Button("Log another meal") { text = ""; fieldFocused = true }
+                Button("Done", role: .cancel) { fieldFocused = false }
+            } message: {
+                Text("It's been added to your history.")
+            }
+            .alert("Meal logging failed", isPresented: $showFailure) {
+                Button("Try again") { Task { await logMeal() } }
+                Button("Done", role: .cancel) { }
+            } message: {
+                Text(failureMessage)
+            }
         }
     }
 
@@ -95,16 +114,8 @@ struct VoiceLogView: View {
     @ViewBuilder private var recentSection: some View {
         if !recentMeals.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Recent").font(.headline)
-                    Spacer()
-                    NavigationLink {
-                        HistoryView()
-                    } label: {
-                        Text("See all history").font(.subheadline)
-                    }
-                }
-                .padding(.bottom, 4)
+                Text("Recent").font(.headline)
+                    .padding(.bottom, 4)
 
                 ForEach(Array(recentMeals.prefix(4).enumerated()), id: \.element.id) { index, meal in
                     MealRow(meal: meal)
@@ -122,21 +133,19 @@ struct VoiceLogView: View {
         }
     }
 
-    /// True when there's something worth clearing (typed text, a live
-    /// dictation, or a just-parsed meal card).
+    /// True when there's something worth clearing (typed text or a live
+    /// dictation in progress).
     private var hasEntry: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || lastParsed != nil
             || speech.isRecording
     }
 
     /// Reset the screen to its empty state. Note: this only clears the
     /// in-progress entry — meals already logged are saved server-side and stay
-    /// on the History tab.
+    /// in your history.
     private func clearEntry() {
         if speech.isRecording { speech.stopRecording() }
         text = ""
-        lastParsed = nil
         errorMessage = nil
         fieldFocused = false
     }
@@ -153,7 +162,6 @@ struct VoiceLogView: View {
                 return
             }
             do {
-                lastParsed = nil
                 try speech.startRecording()
             } catch {
                 errorMessage = "Couldn't start dictation — type your meal instead. (\(error.localizedDescription))"
@@ -168,7 +176,8 @@ struct VoiceLogView: View {
         let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { return }
         guard let client = session.makeClient() else {
-            errorMessage = "Set a valid backend URL in Settings first."
+            failureMessage = "Set a valid backend URL in Settings first."
+            showFailure = true
             return
         }
 
@@ -176,53 +185,23 @@ struct VoiceLogView: View {
         defer { isParsing = false }
 
         do {
-            let meal = try await client.parseMeal(transcript: transcript)
-            lastParsed = meal
-            text = "" // ready for the next entry; it's persisted server-side.
-            await loadRecent() // refresh the Recent list below.
+            _ = try await client.parseMeal(transcript: transcript)
+            text = ""            // saved server-side; ready for the next entry
+            fieldFocused = false
+            await loadRecent()   // refresh the Recent list
+            showSuccess = true
         } catch EnhaleAPIClient.APIError.noFoodFound {
-            errorMessage = "I didn't catch any food in that — try rephrasing?"
+            failureMessage = "I didn't catch any food in that — try rephrasing?"
+            showFailure = true
         } catch EnhaleAPIClient.APIError.unauthorized {
-            errorMessage = "Your session expired — please sign in again."
-            session.logout()
+            session.logout()     // returns to the sign-in screen; no alert needed
         } catch let apiError as EnhaleAPIClient.APIError {
             // Friendly text (incl. the "server waking up, retry" hint for 5xx).
-            errorMessage = apiError.errorDescription
+            failureMessage = apiError.errorDescription ?? "Something went wrong."
+            showFailure = true
         } catch {
-            errorMessage = "Couldn't reach the server — check your connection and the Backend URL in Settings."
+            failureMessage = "Couldn't reach the server — check your connection and the Backend URL in Settings."
+            showFailure = true
         }
-    }
-}
-
-/// Compact summary of a parsed meal.
-struct ParsedMealCard: View {
-    let meal: ParsedMeal
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(meal.mealType.rawValue.capitalized)
-                .font(.headline)
-            ForEach(meal.items) { item in
-                HStack {
-                    Text(item.quantity.map { "\($0) \(item.name)" } ?? item.name)
-                    Spacer()
-                    if let cal = item.calories {
-                        Text("\(Int(cal)) kcal").foregroundStyle(.secondary)
-                    }
-                }
-                .font(.subheadline)
-            }
-            if meal.totalCalories > 0 {
-                Divider()
-                HStack {
-                    Text("Total").fontWeight(.semibold)
-                    Spacer()
-                    Text("\(Int(meal.totalCalories)) kcal").fontWeight(.semibold)
-                }
-                .font(.subheadline)
-            }
-        }
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 }
