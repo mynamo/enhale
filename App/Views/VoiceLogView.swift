@@ -12,6 +12,10 @@ struct VoiceLogView: View {
     @State private var text = ""
     @State private var isParsing = false
     @State private var errorMessage: String?
+    /// The text already in the field when a dictation session starts; live
+    /// transcript is appended to this so starting/resuming dictation never wipes
+    /// what's already there.
+    @State private var dictationBase = ""
     @State private var showSuccess = false
     @State private var showFailure = false
     @State private var failureMessage = ""
@@ -94,9 +98,16 @@ struct VoiceLogView: View {
                     Button("Done") { fieldFocused = false }
                 }
             }
-            // Mirror live dictation into the editable field while recording.
+            // Append live dictation after any existing text (don't overwrite it).
             .onChange(of: speech.transcript) { _, newValue in
-                if speech.isRecording { text = newValue }
+                guard speech.isRecording else { return }
+                if newValue.isEmpty {
+                    text = dictationBase
+                } else if dictationBase.isEmpty {
+                    text = newValue
+                } else {
+                    text = dictationBase + " " + newValue
+                }
             }
             .alert("Meal logged successfully", isPresented: $showSuccess) {
                 Button("Log another meal") { text = ""; fieldFocused = true }
@@ -142,6 +153,9 @@ struct VoiceLogView: View {
                 return
             }
             do {
+                // Preserve whatever's already typed/dictated; the next
+                // transcript is appended to it.
+                dictationBase = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 try speech.startRecording()
             } catch {
                 errorMessage = "Couldn't start dictation — type your meal instead. (\(error.localizedDescription))"

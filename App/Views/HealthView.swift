@@ -37,20 +37,16 @@ struct HealthView: View {
                     Text("Nutrition · today")
                 }
 
-                if let summary {
-                    Section {
-                        statGrid(workoutStats(summary))
-                    } header: {
-                        Text("Activity · today")
-                    }
+                Section {
+                    statGrid(workoutStats)
+                } header: {
+                    Text("Activity · today")
+                }
 
-                    if !sleepStats(summary).isEmpty {
-                        Section {
-                            statGrid(sleepStats(summary))
-                        } header: {
-                            Text("Sleep")
-                        }
-                    }
+                Section {
+                    statGrid(sleepStats)
+                } header: {
+                    Text("Sleep")
                 }
 
                 Section {
@@ -298,41 +294,41 @@ struct HealthView: View {
     }
 
     /// Activity today — calories burned, steps, resting heart rate, and workout
-    /// count from Apple Health.
-    private func workoutStats(_ s: HealthSummary) -> [StatItem] {
-        let today = s.daily.first { $0.date == Self.todayKey }
-        let latestByDate = s.daily.sorted { $0.date > $1.date }
+    /// count from Apple Health. Shows placeholders when nothing is synced yet.
+    private var workoutStats: [StatItem] {
+        let daily = summary?.daily ?? []
+        let workouts = summary?.workouts ?? []
+        let today = daily.first { $0.date == Self.todayKey }
+        let latestByDate = daily.sorted { $0.date > $1.date }
 
-        let workoutBurn = s.workouts
+        let workoutBurn = workouts
             .filter { Calendar.current.isDateInToday($0.startAt) }
             .compactMap(\.activeEnergyKcal).reduce(0, +)
         let burned = today?.activeEnergyKcal ?? workoutBurn
-        let steps = today?.steps ?? latestByDate.compactMap(\.steps).first
+        let steps = today?.steps ?? latestByDate.compactMap(\.steps).first ?? 0
         let hr = today?.restingHeartRate ?? latestByDate.compactMap(\.restingHeartRate).first
-        let workoutsToday = s.workouts.filter { Calendar.current.isDateInToday($0.startAt) }.count
+        let workoutsToday = workouts.filter { Calendar.current.isDateInToday($0.startAt) }.count
 
-        var items: [StatItem] = [
+        return [
             .init(icon: "flame.fill", title: "Calories burned", value: "\(Int(burned)) kcal", tint: .pink),
-            .init(icon: "shoeprints.fill", title: "Steps", value: (steps ?? 0).formatted(), tint: .green),
+            .init(icon: "shoeprints.fill", title: "Steps", value: steps.formatted(), tint: .green),
+            .init(icon: "heart.fill", title: "Resting HR", value: hr.map { "\(Int($0)) bpm" } ?? "—", tint: .red),
+            .init(icon: "figure.run", title: "Workouts", value: "\(workoutsToday)", tint: .orange),
         ]
-        if let hr {
-            items.append(.init(icon: "heart.fill", title: "Resting HR", value: "\(Int(hr)) bpm", tint: .red))
-        }
-        items.append(.init(icon: "figure.run", title: "Workouts", value: "\(workoutsToday)", tint: .orange))
-        return items
     }
 
-    /// Sleep — average hours over the window and a score for last night.
-    private func sleepStats(_ s: HealthSummary) -> [StatItem] {
-        guard !s.sleep.isEmpty else { return [] }
-        let avg = s.sleep.map(\.asleepSeconds).reduce(0, +) / Double(s.sleep.count)
-        var items: [StatItem] = [
-            .init(icon: "bed.double.fill", title: "Avg hours", value: Self.duration(avg), tint: .indigo)
+    /// Sleep — average hours over the window and a score for last night. Shows
+    /// placeholders when no sleep data is synced.
+    private var sleepStats: [StatItem] {
+        let nights = summary?.sleep ?? []
+        let avgValue = nights.isEmpty
+            ? "—"
+            : Self.duration(nights.map(\.asleepSeconds).reduce(0, +) / Double(nights.count))
+        let scoreValue = nights.max(by: { $0.date < $1.date }).map { "\(Self.sleepScore($0))" } ?? "—"
+        return [
+            .init(icon: "bed.double.fill", title: "Avg hours", value: avgValue, tint: .indigo),
+            .init(icon: "moon.stars.fill", title: "Sleep score", value: scoreValue, tint: .mint),
         ]
-        if let lastNight = s.sleep.max(by: { $0.date < $1.date }) {
-            items.append(.init(icon: "moon.stars.fill", title: "Sleep score", value: "\(Self.sleepScore(lastNight))", tint: .mint))
-        }
-        return items
     }
 
     /// A 0–100 heuristic sleep score for one night: duration vs an 8h target,
