@@ -9,9 +9,6 @@ struct ContentView: View {
                 VoiceLogView()
                     .tabItem { Label("Log", systemImage: "mic.fill") }
 
-                HistoryView()
-                    .tabItem { Label("History", systemImage: "list.bullet") }
-
                 HealthView()
                     .tabItem { Label("Health", systemImage: "heart.fill") }
 
