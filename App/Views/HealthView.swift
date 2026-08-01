@@ -13,6 +13,9 @@ struct HealthView: View {
     @State private var status: String?
     @State private var errorMessage: String?
     @State private var showPrimer = false
+    @State private var showSyncAlert = false
+    @State private var syncAlertTitle = ""
+    @State private var syncAlertMessage = ""
     @AppStorage("didShowHealthPrimer") private var didShowHealthPrimer = false
     @AppStorage("lastHealthSyncAt") private var lastHealthSyncAt: Double = 0
     @Environment(\.scenePhase) private var scenePhase
@@ -103,6 +106,11 @@ struct HealthView: View {
                     },
                     onCancel: { showPrimer = false }
                 )
+            }
+            .alert(syncAlertTitle, isPresented: $showSyncAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(syncAlertMessage)
             }
         }
     }
@@ -221,32 +229,45 @@ struct HealthView: View {
             // spinning indefinitely.
             let result = try await client.syncHealth(request, timeout: 45)
             lastHealthSyncAt = Date().timeIntervalSince1970
-            let total = result.workoutsUpserted + result.sleepUpserted + result.dailyUpserted
-            if !auto {
-                if total == 0 {
-                    // Sync worked but Apple Health returned nothing — almost always
-                    // a permissions/device issue, not a server one.
-                    status = "Synced, but Apple Health returned no data. Open Settings → Privacy & Security → Health → enhale and turn on the categories. Health data also needs a real iPhone (the Simulator has none)."
-                    await NotificationManager.shared.notify(
-                        title: "No Health data found",
-                        body: "Enable enhale in Settings → Privacy → Health, then sync again."
-                    )
-                } else {
-                    let message = "Synced \(result.workoutsUpserted) workouts, \(result.sleepUpserted) nights, \(result.dailyUpserted) days."
-                    status = message
-                    await NotificationManager.shared.notify(title: "Health synced", body: message)
+            let w = result.workoutsUpserted, s = result.sleepUpserted, d = result.dailyUpserted
+            let loaded = await loadSummary()
+            guard !auto else { return }
+
+            if w + s + d == 0 {
+                // Upload worked but Apple Health returned nothing — a
+                // permissions/device issue, not a server one.
+                syncAlertTitle = "No Health data found"
+                syncAlertMessage = """
+                The sync worked, but Apple Health had no data to upload.
+
+                • On a real iPhone: Settings → Privacy & Security → Health → enhale, turn every category ON, then Sync again.
+                • The Simulator has no Health data.
+                """
+            } else {
+                syncAlertTitle = "Health synced"
+                var msg = "Uploaded \(w) workouts, \(s) nights, \(d) days."
+                if let summary {
+                    msg += "\nNow showing \(summary.workouts.count) workouts, \(summary.sleep.count) nights, \(summary.daily.count) days."
+                } else if !loaded {
+                    msg += "\n\n(Uploaded fine, but couldn't read the summary back.)"
                 }
+                syncAlertMessage = msg
             }
-            await loadSummary()
+            status = syncAlertMessage
+            showSyncAlert = true
+            await NotificationManager.shared.notify(title: syncAlertTitle, body: syncAlertMessage)
         } catch EnhaleAPIClient.APIError.unauthorized {
             errorMessage = "Your session expired — please sign in again."
             session.logout()
         } catch {
             // Auto-sync fails silently (e.g. offline); a manual sync reports it
-            // both inline and as a notification.
+            // both as an alert and a notification.
             let reason = Self.friendlySyncError(error)
             if !auto {
                 errorMessage = reason
+                syncAlertTitle = "Health sync failed"
+                syncAlertMessage = reason
+                showSyncAlert = true
                 await NotificationManager.shared.notify(title: "Health sync failed", body: reason)
             }
         }
@@ -266,9 +287,16 @@ struct HealthView: View {
         return "Couldn't sync: \(error.localizedDescription)"
     }
 
-    private func loadSummary() async {
-        guard let client = session.makeClient() else { return }
-        summary = try? await client.healthSummary(days: 14)
+    @discardableResult
+    private func loadSummary() async -> Bool {
+        guard let client = session.makeClient() else { return false }
+        do {
+            summary = try await client.healthSummary(days: 14)
+            return true
+        } catch {
+            summary = nil
+            return false
+        }
     }
 
     private func loadMeals() async {
