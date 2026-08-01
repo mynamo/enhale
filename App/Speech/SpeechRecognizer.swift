@@ -18,6 +18,11 @@ final class SpeechRecognizer: ObservableObject {
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    /// Segments already finalized during the current recording. Apple's
+    /// recognizer finalizes an utterance after a pause; we keep this and start a
+    /// fresh segment so a pause never drops earlier words. `transcript` is always
+    /// this plus the live partial.
+    private var finalizedText = ""
 
     /// Ask for mic + speech permission. Call before the first recording.
     func requestAuthorization() async -> Bool {
@@ -38,12 +43,30 @@ final class SpeechRecognizer: ObservableObject {
         // Reset any prior run.
         task?.cancel()
         task = nil
+        finalizedText = ""
         transcript = ""
 
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
+        let inputNode = audioEngine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+        // Feed audio to whichever request is current (segments are recreated on
+        // pause), so keep the tap referencing `self.request`, not a captured one.
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            self?.request?.append(buffer)
+        }
+
+        audioEngine.prepare()
+        try audioEngine.start()
+        isRecording = true
+        beginSegment()
+    }
+
+    /// Start a recognition task on the already-running audio engine. Called again
+    /// after each finalized utterance so recording continues until the user stops.
+    private func beginSegment() {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         if recognizer?.supportsOnDeviceRecognition == true {
@@ -51,38 +74,41 @@ final class SpeechRecognizer: ObservableObject {
         }
         self.request = request
 
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in
-            request?.append(buffer)
-        }
-
-        audioEngine.prepare()
-        try audioEngine.start()
-        isRecording = true
-
         task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
             Task { @MainActor in
+                guard let self, self.isRecording else { return }
                 if let result {
-                    self.transcript = result.bestTranscription.formattedString
+                    self.transcript = self.combined(with: result.bestTranscription.formattedString)
                 }
+                // A finalized utterance (pause) or an error ends this segment.
+                // Commit what we have and immediately listen for the next one.
                 if error != nil || (result?.isFinal ?? false) {
-                    self.stopRecording()
+                    self.finalizedText = self.transcript
+                    self.request = nil
+                    self.task = nil
+                    if self.isRecording { self.beginSegment() }
                 }
             }
         }
     }
 
-    /// Stop capture. The final `transcript` is what you send to the backend
-    /// via `EnhaleAPIClient.parseMeal`.
+    /// Finalized segments + the current live partial.
+    private func combined(with partial: String) -> String {
+        if finalizedText.isEmpty { return partial }
+        if partial.isEmpty { return finalizedText }
+        return finalizedText + " " + partial
+    }
+
+    /// Stop capture (user tapped Stop/Done). The accumulated `transcript` is what
+    /// gets sent to the backend via `EnhaleAPIClient.parseMeal`.
     func stopRecording() {
         guard isRecording else { return }
+        isRecording = false // set first so an in-flight callback won't restart a segment
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         request?.endAudio()
+        task?.cancel()
         request = nil
         task = nil
-        isRecording = false
     }
 }

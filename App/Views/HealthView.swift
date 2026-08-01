@@ -40,7 +40,7 @@ struct HealthView: View {
                 Section {
                     statGrid(workoutStats)
                 } header: {
-                    Text("Activity · today")
+                    Text("Activity")
                 }
 
                 Section {
@@ -293,27 +293,23 @@ struct HealthView: View {
         ]
     }
 
-    /// Activity today — calories burned, steps, resting heart rate, and workout
-    /// count from Apple Health. Shows placeholders when nothing is synced yet.
+    /// Activity — calories burned, steps, and resting heart rate from the most
+    /// recent day that has data (today if available, otherwise the latest synced
+    /// day), plus total workouts in the window. Placeholders when nothing synced.
     private var workoutStats: [StatItem] {
-        let daily = summary?.daily ?? []
+        let daily = (summary?.daily ?? []).sorted { $0.date > $1.date }
         let workouts = summary?.workouts ?? []
-        let today = daily.first { $0.date == Self.todayKey }
-        let latestByDate = daily.sorted { $0.date > $1.date }
 
-        let workoutBurn = workouts
-            .filter { Calendar.current.isDateInToday($0.startAt) }
-            .compactMap(\.activeEnergyKcal).reduce(0, +)
-        let burned = today?.activeEnergyKcal ?? workoutBurn
-        let steps = today?.steps ?? latestByDate.compactMap(\.steps).first ?? 0
-        let hr = today?.restingHeartRate ?? latestByDate.compactMap(\.restingHeartRate).first
-        let workoutsToday = workouts.filter { Calendar.current.isDateInToday($0.startAt) }.count
+        let burned = daily.compactMap(\.activeEnergyKcal).first
+            ?? workouts.compactMap(\.activeEnergyKcal).reduce(0, +)
+        let steps = daily.compactMap(\.steps).first
+        let hr = daily.compactMap(\.restingHeartRate).first
 
         return [
             .init(icon: "flame.fill", title: "Calories burned", value: "\(Int(burned)) kcal", tint: .pink),
-            .init(icon: "shoeprints.fill", title: "Steps", value: steps.formatted(), tint: .green),
+            .init(icon: "shoeprints.fill", title: "Steps", value: steps.map { $0.formatted() } ?? "—", tint: .green),
             .init(icon: "heart.fill", title: "Resting HR", value: hr.map { "\(Int($0)) bpm" } ?? "—", tint: .red),
-            .init(icon: "figure.run", title: "Workouts", value: "\(workoutsToday)", tint: .orange),
+            .init(icon: "figure.run", title: "Workouts", value: "\(workouts.count)", tint: .orange),
         ]
     }
 
@@ -355,15 +351,6 @@ struct HealthView: View {
             score = duration * 75 + efficiency * 25
         }
         return Int(score.rounded())
-    }
-
-    /// Today's local calendar day as a `yyyy-MM-dd` key, matching the format the
-    /// device uses for `DailyMetric.date`.
-    private static var todayKey: String {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: Date())
     }
 
     // MARK: - Formatting
