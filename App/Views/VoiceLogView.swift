@@ -19,60 +19,65 @@ struct VoiceLogView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Editable field — works for typing, dictation, or editing a
-                    // transcription before logging.
-                    TextField("What did you eat? Speak or type…", text: $text, axis: .vertical)
-                        .lineLimit(2...5)
-                        .textFieldStyle(.plain)
-                        .font(.title3)
-                        .focused($fieldFocused)
-                        .padding()
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            VStack(spacing: 24) {
+                Spacer(minLength: 8)
 
-                    // Dictate button — fills the field above; edit afterward.
-                    Button(action: toggleRecording) {
-                        Label(
-                            speech.isRecording ? "Stop dictation" : "Dictate",
-                            systemImage: speech.isRecording ? "stop.circle.fill" : "mic.fill"
-                        )
-                        .foregroundStyle(speech.isRecording ? .red : .accentColor)
-                    }
+                // Editable field — works for typing, dictation, or editing a
+                // transcription before logging.
+                TextField("What did you eat? Speak or type…", text: $text, axis: .vertical)
+                    .lineLimit(2...6)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .focused($fieldFocused)
+                    .padding()
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
 
-                    if isParsing {
-                        ProgressView("Understanding…")
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-
-                    Button {
-                        fieldFocused = false
-                        Task { await logMeal() }
-                    } label: {
-                        Text("Log meal")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isParsing)
-
-                    // Full meal history lives behind this button (History is no
-                    // longer a tab).
-                    NavigationLink {
-                        HistoryView()
-                    } label: {
-                        Label("History", systemImage: "clock.arrow.circlepath")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.bordered)
+                // Dictate button — fills the field above; edit afterward.
+                Button(action: toggleRecording) {
+                    Label(
+                        speech.isRecording ? "Stop dictation" : "Dictate",
+                        systemImage: speech.isRecording ? "stop.circle.fill" : "mic.fill"
+                    )
+                    .foregroundStyle(speech.isRecording ? .red : .accentColor)
                 }
-                .padding()
+
+                if isParsing {
+                    ProgressView("Understanding…")
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                }
+
+                Spacer()
+
+                Button {
+                    fieldFocused = false
+                    Task { await logMeal() }
+                } label: {
+                    Text("Log meal")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isParsing)
+            }
+            .padding()
+            // History lives behind a button pinned to the bottom of the screen.
+            .safeAreaInset(edge: .bottom) {
+                NavigationLink {
+                    HistoryView()
+                } label: {
+                    Label("History", systemImage: "clock.arrow.circlepath")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
             }
             .navigationTitle("Log a meal")
             .toolbar {
