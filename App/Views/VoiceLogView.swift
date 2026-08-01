@@ -12,7 +12,6 @@ struct VoiceLogView: View {
     @State private var text = ""
     @State private var isParsing = false
     @State private var errorMessage: String?
-    @State private var recentMeals: [ParsedMeal] = []
     @State private var showSuccess = false
     @State private var showFailure = false
     @State private var failureMessage = ""
@@ -62,22 +61,22 @@ struct VoiceLogView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isParsing)
 
-                    recentSection
-                }
-                .padding()
-            }
-            .navigationTitle("Log a meal")
-            .task { await loadRecent() }
-            .toolbar {
-                // Open the full meal history (History is no longer a tab).
-                ToolbarItem(placement: .topBarTrailing) {
+                    // Full meal history lives behind this button (History is no
+                    // longer a tab).
                     NavigationLink {
                         HistoryView()
                     } label: {
                         Label("History", systemImage: "clock.arrow.circlepath")
-                            .labelStyle(.titleAndIcon)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
                     }
+                    .buttonStyle(.bordered)
                 }
+                .padding()
+            }
+            .navigationTitle("Log a meal")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { EnhaleLogo() }
                 // Clear the current entry if you change your mind before logging.
                 ToolbarItem(placement: .topBarLeading) {
                     if hasEntry {
@@ -106,30 +105,6 @@ struct VoiceLogView: View {
             } message: {
                 Text(failureMessage)
             }
-        }
-    }
-
-    /// Recent meals with a link to the full history (History is no longer a
-    /// tab — it lives here now).
-    @ViewBuilder private var recentSection: some View {
-        if !recentMeals.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Recent").font(.headline)
-                    .padding(.bottom, 4)
-
-                ForEach(Array(recentMeals.prefix(4).enumerated()), id: \.element.id) { index, meal in
-                    MealRow(meal: meal)
-                    if index < min(recentMeals.count, 4) - 1 { Divider() }
-                }
-            }
-            .padding(.top, 8)
-        }
-    }
-
-    private func loadRecent() async {
-        guard let client = session.makeClient() else { return }
-        if let meals = try? await client.listMeals() {
-            recentMeals = meals.sorted { $0.eatenAt > $1.eatenAt }
         }
     }
 
@@ -188,7 +163,6 @@ struct VoiceLogView: View {
             _ = try await client.parseMeal(transcript: transcript)
             text = ""            // saved server-side; ready for the next entry
             fieldFocused = false
-            await loadRecent()   // refresh the Recent list
             showSuccess = true
         } catch EnhaleAPIClient.APIError.noFoodFound {
             failureMessage = "I didn't catch any food in that — try rephrasing?"
