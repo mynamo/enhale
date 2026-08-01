@@ -6,7 +6,7 @@ import SwiftUI
 /// never ships inside the app. Clients only need to know where the service is.
 struct SettingsView: View {
     @EnvironmentObject private var session: SessionManager
-    @AppStorage("backendBaseURL") private var backendBaseURL = "https://enhale-backend-production.up.railway.app"
+    @AppStorage("backendBaseURL") private var backendBaseURL = SessionManager.defaultBackendURL
 
     /// The backend serves the privacy policy at `/privacy`.
     private var privacyURL: URL? {
