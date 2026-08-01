@@ -71,8 +71,17 @@ struct VoiceLogView: View {
             .navigationTitle("Log a meal")
             .task { await loadRecent() }
             .toolbar {
-                // Clear the current entry if you change your mind before logging.
+                // Open the full meal history (History is no longer a tab).
                 ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        HistoryView()
+                    } label: {
+                        Label("History", systemImage: "clock.arrow.circlepath")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                // Clear the current entry if you change your mind before logging.
+                ToolbarItem(placement: .topBarLeading) {
                     if hasEntry {
                         Button("Clear", role: .destructive) { clearEntry() }
                     }
@@ -95,16 +104,8 @@ struct VoiceLogView: View {
     @ViewBuilder private var recentSection: some View {
         if !recentMeals.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Recent").font(.headline)
-                    Spacer()
-                    NavigationLink {
-                        HistoryView()
-                    } label: {
-                        Text("See all history").font(.subheadline)
-                    }
-                }
-                .padding(.bottom, 4)
+                Text("Recent").font(.headline)
+                    .padding(.bottom, 4)
 
                 ForEach(Array(recentMeals.prefix(4).enumerated()), id: \.element.id) { index, meal in
                     MealRow(meal: meal)

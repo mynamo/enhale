@@ -79,6 +79,9 @@ struct HealthView: View {
                 }
             }
             .navigationTitle("Health")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { EnhaleLogo() }
+            }
             .task {
                 await loadSummary()
                 await autoSyncIfDue()
