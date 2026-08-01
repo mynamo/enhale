@@ -24,7 +24,11 @@ struct HistoryView: View {
                     ForEach(byDay, id: \.day) { group in
                         Section {
                             ForEach(group.meals) { meal in
-                                MealRow(meal: meal)
+                                NavigationLink {
+                                    MealEditView(meal: meal) { await load() }
+                                } label: {
+                                    MealRow(meal: meal)
+                                }
                             }
                             .onDelete { offsets in
                                 delete(offsets.map { group.meals[$0] })

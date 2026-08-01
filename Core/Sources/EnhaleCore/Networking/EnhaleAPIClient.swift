@@ -93,6 +93,19 @@ public struct EnhaleAPIClient: Sendable {
         return try Self.decoder.decode([ParsedMeal].self, from: data)
     }
 
+    /// Edit a stored meal. The backend merges the editable fields into the saved
+    /// payload, preserving micronutrient detail the client doesn't carry.
+    @discardableResult
+    public func updateMeal(_ meal: ParsedMeal) async throws -> ParsedMeal {
+        let data = try await send(
+            path: "meals/\(meal.id.uuidString.lowercased())",
+            method: "PUT",
+            body: meal,
+            authorized: true
+        )
+        return try Self.decoder.decode(ParsedMeal.self, from: data)
+    }
+
     /// Delete one of the signed-in user's meals.
     public func deleteMeal(id: UUID) async throws {
         _ = try await send(

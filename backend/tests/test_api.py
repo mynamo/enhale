@@ -104,3 +104,57 @@ def test_cannot_delete_another_users_meal(client, stub_parser, auth):
 
     assert client.delete(f"/meals/{meal_id}", headers=bob).status_code == 404
     assert len(client.get("/meals", headers=alice).json()) == 1
+
+
+MEAL_WITH_MICROS = (
+    '{"items":[{"name":"oatmeal","calories":150,"iron_mg":5,"estimated":true}],'
+    '"meal_type":"breakfast","confidence":0.8}'
+)
+
+
+def test_update_meal_edits_and_preserves_micronutrients(client, stub_parser, auth):
+    stub_parser(MEAL_WITH_MICROS)
+    headers = auth()
+    created = client.post("/meals/parse", json={"transcript": "oatmeal"}, headers=headers).json()
+    meal_id, item_id = created["id"], created["items"][0]["id"]
+
+    body = {
+        "meal_type": "lunch",
+        "eaten_at": "2026-01-01T12:00:00Z",
+        "items": [{"id": item_id, "name": "steel-cut oatmeal", "calories": 200}],
+    }
+    r = client.put(f"/meals/{meal_id}", json=body, headers=headers)
+    assert r.status_code == 200
+    updated = r.json()
+    assert updated["meal_type"] == "lunch"
+    assert updated["items"][0]["name"] == "steel-cut oatmeal"
+    assert updated["items"][0]["calories"] == 200
+    assert updated["items"][0]["iron_mg"] == 5  # micronutrient preserved on edit
+
+    # Persisted and reflected in the list.
+    listed = client.get("/meals", headers=headers).json()
+    assert listed[0]["items"][0]["name"] == "steel-cut oatmeal"
+
+
+def test_update_meal_can_drop_and_add_items(client, stub_parser, auth):
+    stub_parser(OATMEAL)
+    headers = auth()
+    meal_id = client.post("/meals/parse", json={"transcript": "oatmeal"}, headers=headers).json()["id"]
+
+    body = {  # drop the oatmeal (omit its id), add a brand-new item
+        "meal_type": "snack",
+        "eaten_at": "2026-01-01T15:00:00Z",
+        "items": [{"name": "apple", "calories": 95}],
+    }
+    updated = client.put(f"/meals/{meal_id}", json=body, headers=headers).json()
+    assert [i["name"] for i in updated["items"]] == ["apple"]
+
+
+def test_cannot_update_another_users_meal(client, stub_parser, auth):
+    stub_parser(OATMEAL)
+    alice = auth(email="ua@y.com")
+    bob = auth(email="ub@y.com")
+    meal_id = client.post("/meals/parse", json={"transcript": "oatmeal"}, headers=alice).json()["id"]
+
+    body = {"meal_type": "snack", "eaten_at": "2026-01-01T12:00:00Z", "items": []}
+    assert client.put(f"/meals/{meal_id}", json=body, headers=bob).status_code == 404

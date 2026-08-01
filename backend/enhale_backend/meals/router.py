@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -18,7 +19,7 @@ from ..auth.dependencies import get_current_user
 from ..db import get_session
 from ..db_models import Meal, User
 from ..deps import get_parser
-from ..models import ParsedMeal
+from ..models import FoodItem, MealType, ParsedMeal
 from ..parsing.meal_parser import MalformedResponseError, MealParser, NoFoodFoundError
 
 router = APIRouter(prefix="/meals", tags=["meals"])
@@ -74,6 +75,75 @@ async def list_meals(
 
     rows = (await session.scalars(stmt)).all()
     return [ParsedMeal.model_validate(row.payload) for row in rows]
+
+
+class UpdateFoodItem(BaseModel):
+    """One edited item. ``id`` matches an existing item so its non-editable
+    fields (micronutrients) are preserved; omit it for a newly added item."""
+    id: Optional[UUID] = None
+    name: str
+    quantity: Optional[str] = None
+    calories: Optional[float] = None
+    protein_grams: Optional[float] = None
+    carb_grams: Optional[float] = None
+    fat_grams: Optional[float] = None
+
+
+class UpdateMealRequest(BaseModel):
+    meal_type: MealType
+    eaten_at: datetime
+    items: list[UpdateFoodItem]
+
+
+@router.put("/{meal_id}", response_model=ParsedMeal)
+async def update_meal(
+    meal_id: str,
+    body: UpdateMealRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ParsedMeal:
+    """Edit a stored meal. Merges the editable fields into the existing payload
+    so nutrition detail the client doesn't send (micronutrients) is retained for
+    items kept by id; items dropped from the list are removed."""
+    row = await session.get(Meal, meal_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Meal not found")
+
+    meal = ParsedMeal.model_validate(row.payload)
+    existing = {str(item.id): item for item in meal.items}
+
+    new_items: list[FoodItem] = []
+    for edited in body.items:
+        base = existing.get(str(edited.id)) if edited.id is not None else None
+        if base is not None:
+            base.name = edited.name
+            base.quantity = edited.quantity
+            base.calories = edited.calories
+            base.protein_grams = edited.protein_grams
+            base.carb_grams = edited.carb_grams
+            base.fat_grams = edited.fat_grams
+            new_items.append(base)
+        else:
+            new_items.append(
+                FoodItem(
+                    name=edited.name,
+                    quantity=edited.quantity,
+                    calories=edited.calories,
+                    protein_grams=edited.protein_grams,
+                    carb_grams=edited.carb_grams,
+                    fat_grams=edited.fat_grams,
+                    estimated=False,  # user-entered, not an LLM estimate
+                )
+            )
+
+    meal.items = new_items
+    meal.meal_type = body.meal_type
+    meal.eaten_at = body.eaten_at
+
+    row.eaten_at = body.eaten_at
+    row.payload = meal.model_dump(mode="json")
+    await session.commit()
+    return meal
 
 
 @router.delete("/{meal_id}", status_code=204)
