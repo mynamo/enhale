@@ -249,7 +249,7 @@ public struct EnhaleAPIClient: Sendable {
         authorized: Bool,
         timeout: TimeInterval? = nil
     ) async throws -> Data {
-        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        var request = URLRequest(url: Self.makeURL(base: baseURL, path: path))
         request.httpMethod = method
         if let timeout { request.timeoutInterval = timeout }
         if let body {
@@ -263,6 +263,20 @@ public struct EnhaleAPIClient: Sendable {
 
         let (data, response) = try await session.data(for: request)
         return try Self.process(data, response)
+    }
+
+    /// Build the request URL from a `path` that may include a query string.
+    /// `appendingPathComponent` percent-encodes `?`, which turns a query into part
+    /// of the path (`/health/summary%3Fdays=14` → 404), so split path and query
+    /// and set the query via URLComponents.
+    private static func makeURL(base: URL, path: String) -> URL {
+        let parts = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+        var url = base.appendingPathComponent(String(parts[0]))
+        if parts.count > 1, var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            comps.percentEncodedQuery = String(parts[1])
+            if let u = comps.url { url = u }
+        }
+        return url
     }
 
     /// Map an HTTP response to data-or-error. Shared by JSON and multipart calls.
