@@ -217,9 +217,6 @@ struct HealthView: View {
             if !auto { errorMessage = "Set a valid backend URL first." }
             return
         }
-        // Ask for notification permission on the first manual sync so we can post
-        // the success/failure banner.
-        if !auto { await NotificationManager.shared.requestAuthorization() }
         isSyncing = true
         defer { isSyncing = false }
         do {
@@ -255,7 +252,6 @@ struct HealthView: View {
             }
             status = syncAlertMessage
             showSyncAlert = true
-            await NotificationManager.shared.notify(title: syncAlertTitle, body: syncAlertMessage)
         } catch EnhaleAPIClient.APIError.unauthorized {
             errorMessage = "Your session expired — please sign in again."
             session.logout()
@@ -268,7 +264,6 @@ struct HealthView: View {
                 syncAlertTitle = "Health sync failed"
                 syncAlertMessage = reason
                 showSyncAlert = true
-                await NotificationManager.shared.notify(title: "Health sync failed", body: reason)
             }
         }
     }

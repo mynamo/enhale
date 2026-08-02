@@ -311,28 +311,59 @@ public struct EnhaleAPIClient: Sendable {
     private static var decoder: JSONDecoder {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
-        // Pydantic may or may not include fractional seconds — accept both.
         d.dateDecodingStrategy = .custom { decoder in
             let string = try decoder.singleValueContainer().decode(String.self)
-            let withFraction = ISO8601DateFormatter()
-            withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = withFraction.date(from: string) { return date }
-            let plain = ISO8601DateFormatter()
-            plain.formatOptions = [.withInternetDateTime]
-            if let date = plain.date(from: string) { return date }
-            // Safety net: a datetime with no timezone (e.g. SQLite round-trips) —
-            // interpret it as UTC.
-            let naive = DateFormatter()
-            naive.calendar = Calendar(identifier: .gregorian)
-            naive.timeZone = TimeZone(identifier: "UTC")
-            naive.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-            if let date = naive.date(from: string) { return date }
+            if let date = parseISODate(string) { return date }
             throw DecodingError.dataCorrupted(
                 .init(codingPath: decoder.codingPath,
                       debugDescription: "Unrecognized date: \(string)")
             )
         }
         return d
+    }
+
+    /// Parse a backend datetime. Pydantic/Python emit fractional seconds with
+    /// *microsecond* precision (6 digits), which `ISO8601DateFormatter` rejects
+    /// (it only accepts 3) — so we normalize the fraction to 3 digits and retry.
+    /// A failure here would blank an entire decoded array (e.g. the whole health
+    /// summary), so this needs to be forgiving.
+    private static func parseISODate(_ string: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: string) { return date }
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: string) { return date }
+
+        // Normalize fractional seconds to exactly 3 digits, then retry.
+        if let normalized = normalizeFractionalSeconds(string) {
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = iso.date(from: normalized) { return date }
+        }
+
+        // Naive datetime (no timezone) — interpret as UTC.
+        let naive = DateFormatter()
+        naive.calendar = Calendar(identifier: .gregorian)
+        naive.locale = Locale(identifier: "en_US_POSIX")
+        naive.timeZone = TimeZone(identifier: "UTC")
+        for format in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+            naive.dateFormat = format
+            if let date = naive.date(from: string) { return date }
+        }
+        return nil
+    }
+
+    /// Rewrite the fractional-seconds run in an ISO string to exactly 3 digits
+    /// (truncating microseconds / padding shorter fractions). Returns nil when
+    /// there's nothing to change.
+    private static func normalizeFractionalSeconds(_ s: String) -> String? {
+        guard let dot = s.firstIndex(of: ".") else { return nil }
+        let fracStart = s.index(after: dot)
+        var end = fracStart
+        while end < s.endIndex, s[end].isNumber { end = s.index(after: end) }
+        let count = s.distance(from: fracStart, to: end)
+        guard count != 3 else { return nil }
+        let three = String((String(s[fracStart..<end]) + "000").prefix(3))
+        return s.replacingCharacters(in: fracStart..<end, with: three)
     }
 
     private static var dayFormatter: DateFormatter {
